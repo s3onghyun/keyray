@@ -95,6 +95,7 @@ struct OnboardingView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Keycaps show the shortcuts you press, so your audience can follow along.")
                 .font(.headline)
+                .fixedSize(horizontal: false, vertical: true)
             Text("""
             To see key presses, macOS asks you to allow Input Monitoring for this app. The app only \
             listens: it cannot type, click or change anything, keystrokes are never saved or sent \
@@ -109,6 +110,7 @@ struct OnboardingView: View {
                 Text("3. Come back and click “Check again”. If it still says no, quit and reopen the app.")
             }
             .font(.callout)
+            .fixedSize(horizontal: false, vertical: true)
             Text(statusText).font(.callout.bold())
             HStack {
                 Button("Ask macOS") { request(); refresh() }.keyboardShortcut(.defaultAction)
