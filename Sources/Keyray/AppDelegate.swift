@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import KeyrayCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
@@ -88,6 +89,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
                 MainActor.assumeIsolated { self?.keycaps.preview(bundleID: app) }
             }
+        }
+        // Testing: `--import-keybindings <path>` imports a keybindings.json the sandbox can already
+        // read (inside the app's container); people use "Import VS Code keybindings…".
+        if let i = args.firstIndex(of: "--import-keybindings"), i + 1 < args.count {
+            importVSCodeKeybindings(from: URL(fileURLWithPath: args[i + 1]), showSummary: false)
         }
         // Setup: `--ask-input-monitoring` turns keycaps on (shortcuts only unless already set) and
         // does what the onboarding window's "Ask macOS" button does.
@@ -283,6 +289,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    // MARK: VS Code keybindings
+
+    /// Lets the user pick their keybindings.json; the sandbox can read only a file they choose.
+    private func chooseVSCodeKeybindings() {
+        let panel = NSOpenPanel()
+        panel.title = "Import VS Code keybindings"
+        panel.message = "Choose your keybindings.json. VS Code keeps it in ~/Library/Application Support/Code/User."
+        panel.prompt = "Import"
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        // Inside the sandbox NSHomeDirectory() is the container; start in the real home's VS Code folder.
+        if let home = getpwuid(getuid()).map({ String(cString: $0.pointee.pw_dir) }) {
+            panel.directoryURL = URL(fileURLWithPath: home).appendingPathComponent("Library/Application Support/Code/User")
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        importVSCodeKeybindings(from: url, showSummary: true)
+    }
+
+    private func importVSCodeKeybindings(from url: URL, showSummary: Bool) {
+        let message: String
+        do {
+            let text = try String(contentsOf: url, encoding: .utf8)
+            let (imported, summary) = try VSCodeKeybindings.parse(text, fileName: url.lastPathComponent)
+            store.settings.vscodeKeybindings = imported
+            Log.keys.notice("imported \(summary.imported) keybindings from \(url.lastPathComponent, privacy: .public): removed \(summary.removedDefaults), context \(summary.contextDependent), chords \(summary.chords), unreadable \(summary.unreadable)")
+            var lines = ["Imported \(summary.imported) shortcuts. VS Code subtitles now use your names for them."]
+            if summary.removedDefaults > 0 { lines.append("\(summary.removedDefaults) defaults you removed show no subtitle.") }
+            if summary.contextDependent > 0 {
+                lines.append("\(summary.contextDependent) keys do different things depending on where you are (\"when\"), so they show no subtitle.")
+            }
+            if summary.chords + summary.unreadable > 0 {
+                lines.append("Skipped \(summary.chords) two-step chords and \(summary.unreadable) entries that could not be read.")
+            }
+            message = lines.joined(separator: "\n\n")
+        } catch {
+            Log.keys.error("keybindings import failed: \(String(describing: error), privacy: .public)")
+            message = "Keyray could not read \(url.lastPathComponent) as a VS Code keybindings file."
+        }
+        guard showSummary else { return }
+        let alert = NSAlert()
+        alert.messageText = "VS Code keybindings"
+        alert.informativeText = message
+        alert.addButton(withTitle: "OK")
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
+    }
+
     // MARK: Menu
 
     private func setUpStatusItem() {
@@ -381,6 +435,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         subs.submenu = subsMenu
         menu.addItem(subs)
         menu.addItem(item("Shortcut Subtitles", checked: s.keycapSubtitles, indent: 1) { $0.store.settings.keycapSubtitles.toggle() })
+        menu.addItem(item("Import VS Code keybindings…", indent: 1) { $0.chooseVSCodeKeybindings() })
+        if let imported = s.vscodeKeybindings {
+            menu.addItem(item("Remove imported keybindings (\(imported.bindings.count))", indent: 1) {
+                $0.store.settings.vscodeKeybindings = nil
+            })
+        }
         menu.addItem(item(keycaps.isPositioning ? "Done moving keycaps" : "Move keycaps…", indent: 1) { d in
             if d.keycaps.isPositioning { d.keycaps.endPositioning() } else { d.keycaps.beginPositioning() }
         })

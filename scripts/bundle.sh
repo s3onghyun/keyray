@@ -1,6 +1,7 @@
 #!/bin/sh
-# Build build/Keyray.app: release binary, Info.plist (LSUIElement menu-bar app), App Sandbox
-# entitlement only, signed with the Hardened Runtime (--options runtime) so both are really active.
+# Build build/Keyray.app: release binary, Info.plist (LSUIElement menu-bar app), App Sandbox plus
+# read access to files the user picks, signed with the Hardened Runtime (--options runtime) so
+# both are really active.
 #
 #   SIGN_IDENTITY      codesign identity (default "-", ad hoc)
 #   BUNDLE_IDENTIFIER  bundle id (default com.s3onghyun.keyray)

@@ -374,14 +374,34 @@ let cmd: KeyModifiers = [.command]
 }
 
 @Test func everyPreviewKeyHasASubtitle() {
-    for id in ShortcutSubtitles.apps.keys {
+    for (id, app) in ShortcutSubtitles.apps {
+        #expect(!app.sources.isEmpty, "\(id) lists no source")
+        #expect(ShortcutSubtitles.previewStrokes(bundleID: id).count == app.sample.count, "\(id): a sample label has no key")
         for stroke in ShortcutSubtitles.previewStrokes(bundleID: id) {
-            let name = ShortcutSubtitles.subtitle(for: stroke, bundleID: id)
-            // Apps without their own sample use the browser keys, which only browsers know.
-            if ["com.apple.finder", "com.figma.Desktop", "com.microsoft.Powerpoint"].contains(id) { continue }
-            #expect(name != nil, "\(id): \(stroke.label)")
+            #expect(ShortcutSubtitles.subtitle(for: stroke, bundleID: id) != nil, "\(id): \(stroke.label)")
         }
     }
+    // Apps without a dictionary preview the system-wide keys.
+    let other = ShortcutSubtitles.previewStrokes(bundleID: "com.example.unknown")
+    #expect(!other.isEmpty && other.allSatisfy { ShortcutSubtitles.subtitle(for: $0, bundleID: "com.example.unknown") != nil })
+}
+
+@Test func labelsRoundTripToStrokes() {
+    for label in ["⇧⌘P", "⌃`", "⌥F12", "esc", "⇧esc", "⌘↩", "⌃⇧⇥", "⇧⌘␣", "⌥⌘[", "F5"] {
+        #expect(ShortcutSubtitles.stroke(forLabel: label)?.label == label)
+    }
+    #expect(ShortcutSubtitles.stroke(forLabel: "⌘") == nil)
+}
+
+@Test func sharedKeymapsUseOneDictionary() {
+    let findAction = KeyStroke(keyCode: 0, modifiers: [.shift, .command])
+    for id in ["com.jetbrains.intellij", "com.jetbrains.pycharm", "com.jetbrains.WebStorm", "com.google.android.studio"] {
+        #expect(ShortcutSubtitles.subtitle(for: findAction, bundleID: id) == "Find Action", "\(id)")
+    }
+    #expect(ShortcutSubtitles.appName(bundleID: "com.vscodium") == "VS Code")
+    // Same keys, different apps.
+    #expect(ShortcutSubtitles.subtitle(for: findAction, bundleID: "us.zoom.xos") == "Mute/Unmute Audio")
+    #expect(ShortcutSubtitles.subtitle(for: findAction, bundleID: "com.tinyspeck.slackmacgap") == "All Unreads")
 }
 
 @Test func feedCarriesSubtitlesWithRepeatCount() {
@@ -403,4 +423,107 @@ let cmd: KeyModifiers = [.command]
     #expect(t.alpha(age: t.land + t.hold / 2) == 1)
     #expect(t.alpha(age: t.duration) == 0)
     #expect(abs(t.alpha(age: t.land + t.hold + t.fade / 2) - 0.5) < 1e-9)
+}
+
+// MARK: - VS Code keybindings import
+
+private let sampleKeybindings = """
+// Place your key bindings in this file to override the defaults
+[
+    { "key": "cmd+p", "command": "workbench.action.files.openRecent" }, // a comment
+    /* block
+       comment */
+    { "key": "cmd+d", "command": "-editor.action.addSelectionToNextFindMatch", "when": "editorFocus" },
+    { "key": "cmd+b", "command": "-workbench.action.toggleSidebarVisibility" },
+    { "key": "cmd+b", "command": "editor.action.joinLines", },
+    { "key": "cmd+j", "command": "workbench.action.terminal.focusNext", "when": "terminalFocus" },
+    { "key": "ctrl+alt+t", "command": "workbench.action.terminal.new", "when": "editorTextFocus" },
+    { "key": "cmd+k cmd+s", "command": "workbench.action.openGlobalKeybindings" },
+    { "key": "hyper+x", "command": "editor.action.commentLine" },
+    { "key": "shift+alt+[ArrowDown]", "command": "editor.action.copyLinesDownAction", "args": { "text": "// not a comment" } },
+    { "key": "f5", "command": "workbench.action.debug.start" },
+]
+"""
+
+private func vscode(_ label: String, _ imported: ImportedKeybindings?) -> String? {
+    for code in 0..<128 {
+        for mods in 0..<16 {
+            let s = KeyStroke(keyCode: code, modifiers: KeyModifiers(rawValue: mods))
+            if s.label == label { return ShortcutSubtitles.subtitle(for: s, bundleID: "com.microsoft.VSCode", imported: imported) }
+        }
+    }
+    Issue.record("no stroke for \(label)")
+    return nil
+}
+
+@Test func vscodeKeysParseToKeycapLabels() {
+    #expect(VSCodeKeybindings.stroke(for: "cmd+shift+p")?.label == "⇧⌘P")
+    #expect(VSCodeKeybindings.stroke(for: "ctrl+`")?.label == "⌃`")
+    #expect(VSCodeKeybindings.stroke(for: "alt+f12")?.label == "⌥F12")
+    #expect(VSCodeKeybindings.stroke(for: "shift+alt+down")?.label == "⌥⇧↓")
+    #expect(VSCodeKeybindings.stroke(for: "cmd+[KeyK]")?.label == "⌘K")
+    #expect(VSCodeKeybindings.stroke(for: "cmd+[Digit1]")?.label == "⌘1")
+    #expect(VSCodeKeybindings.stroke(for: "cmd+-")?.label == "⌘-")
+    #expect(VSCodeKeybindings.stroke(for: "meta+enter")?.label == "⌘↩")
+    #expect(VSCodeKeybindings.stroke(for: "escape")?.label == "esc")
+    #expect(VSCodeKeybindings.stroke(for: "hyper+x") == nil)
+    #expect(VSCodeKeybindings.stroke(for: "cmd+") == nil)
+    #expect(VSCodeKeybindings.stroke(for: "cmd+numpad_add") == nil)
+}
+
+@Test func vscodeCommandsGetReadableTitles() {
+    #expect(VSCodeKeybindings.title(forCommand: "workbench.action.showCommands") == "Command Palette")
+    #expect(VSCodeKeybindings.title(forCommand: "editor.action.joinLines") == "Join Lines")
+    #expect(VSCodeKeybindings.title(forCommand: "workbench.action.files.openRecent") == "Open Recent")
+    #expect(VSCodeKeybindings.title(forCommand: "workbench.action.terminal.kill") == "Terminal Kill")
+    #expect(VSCodeKeybindings.title(forCommand: "myExtension.do_thing") == "Do Thing")
+}
+
+@Test func jsoncCommentsAndTrailingCommasAreAccepted() throws {
+    let (_, summary) = try VSCodeKeybindings.parse(sampleKeybindings)
+    #expect(summary.chords == 1)
+    #expect(summary.unreadable == 1) // hyper+x
+    #expect(throws: VSCodeKeybindings.ImportError.notAnArray) { try VSCodeKeybindings.parse("{ \"key\": \"cmd+p\" }") }
+    // "//" inside a string is not a comment.
+    #expect(VSCodeKeybindings.stripComments("[\"a // b\"] // c") == "[\"a // b\"] ")
+    #expect(VSCodeKeybindings.stripTrailingCommas("[1, 2, ] , {\"a\": \",]\",}") == "[1, 2 ] , {\"a\": \",]\"}")
+}
+
+@Test func importedBindingsOverrideVSCodeDefaults() throws {
+    let (imported, summary) = try VSCodeKeybindings.parse(sampleKeybindings)
+    // Before the import, the bundled defaults.
+    #expect(vscode("⌘P", nil) == "Quick Open")
+    #expect(vscode("⌘D", nil) == "Add Selection to Next Match")
+    // The user's own binding wins.
+    #expect(vscode("⌘P", imported) == "Open Recent")
+    // A removed default is silent, unless the key is rebound.
+    #expect(vscode("⌘D", imported) == nil)
+    #expect(vscode("⌘B", imported) == "Join Lines")
+    // A key that means one thing in the terminal and another elsewhere stays silent...
+    #expect(vscode("⌘J", imported) == nil)
+    // ...but a `when` binding on a key nothing else uses is named.
+    #expect(vscode("⌃⌥T", imported) == "New Terminal")
+    #expect(vscode("⌥⇧↓", imported) == "Copy Line Down")
+    #expect(vscode("F5", imported) == "Start Debugging")
+    // Untouched defaults and system-wide keys still work.
+    #expect(vscode("⇧⌘P", imported) == "Command Palette")
+    #expect(vscode("⌘C", imported) == "Copy")
+    #expect(summary.imported == 5 && summary.removedDefaults == 1 && summary.contextDependent == 1)
+    // Other apps are unaffected.
+    let cmdP = KeyStroke(keyCode: 35, modifiers: [.command])
+    #expect(ShortcutSubtitles.subtitle(for: cmdP, bundleID: "com.apple.Safari", imported: imported) == nil)
+    #expect(ShortcutSubtitles.subtitle(for: cmdP, bundleID: "com.microsoft.VSCodeInsiders", imported: imported) == "Open Recent")
+}
+
+@Test func importedBindingsPreviewAndPersist() throws {
+    let (imported, _) = try VSCodeKeybindings.parse(sampleKeybindings)
+    let preview = ShortcutSubtitles.previewStrokes(bundleID: "com.microsoft.VSCode", imported: imported)
+    #expect(preview.prefix(3).map(\.label) == ["⌘P", "⌘B", "⌃⌥T"])
+    for stroke in preview.prefix(3) {
+        #expect(ShortcutSubtitles.subtitle(for: stroke, bundleID: "com.microsoft.VSCode", imported: imported) != nil)
+    }
+    var s = AppSettings()
+    s.vscodeKeybindings = imported
+    #expect(AppSettings.decoded(from: try s.encoded()) == s)
+    #expect(AppSettings.decoded(from: try AppSettings().encoded()).vscodeKeybindings == nil)
 }

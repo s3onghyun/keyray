@@ -48,13 +48,59 @@ Keycaps also say what a shortcut does in the frontmost app: ⇧⌘P in VS Code s
 Palette", ⌃R in Terminal shows "Search History". The names come from bundled dictionaries of each
 app's documented default key bindings (`ShortcutSubtitles` in `KeyrayCore`).
 
-- **Apps covered:** VS Code, Xcode, Terminal, iTerm2, Chrome, Safari, Finder, Keynote, PowerPoint
-  and Figma, plus a few universal macOS shortcuts such as Copy and Undo.
+- **Apps covered:**
+  - Editors: VS Code (also Insiders and VSCodium), Xcode, and JetBrains IDEs on the default macOS
+    keymap (IntelliJ IDEA, PyCharm, WebStorm, GoLand, CLion, Android Studio).
+  - Terminals: Terminal and iTerm2, plus zsh's line-editing keys.
+  - Browsers: Chrome, Safari and Firefox.
+  - Presenting: Keynote, PowerPoint, Zoom and Microsoft Teams.
+  - Other: Finder, Figma, Slack and Notion, plus a few universal macOS shortcuts such as Copy and
+    Undo.
+- **Only documented defaults:** every entry comes from the vendor's own shortcut page for the Mac
+  (listed under "Shortcut sources" below and in each dictionary's `sources`). A key the vendor
+  gives two meanings, or documents only for Windows, is left out.
 - **Unknown shortcuts:** a shortcut not in the dictionary shows only its keycap, because a wrong
   name is worse than none.
 - **App detection:** `NSWorkspace.frontmostApplication`, which needs no permission. Live keys still
   need Input Monitoring.
 - **Turning it off:** Keycaps › Shortcut Subtitles, or Settings.
+
+**Shortcut sources.**
+
+| App | Vendor page |
+|---|---|
+| VS Code | [macOS shortcuts PDF](https://code.visualstudio.com/shortcuts/keyboard-shortcuts-macos.pdf), [default keybindings](https://code.visualstudio.com/docs/reference/default-keybindings), [tips and tricks](https://code.visualstudio.com/docs/editing/getting-started/tips-and-tricks) (⌘J) |
+| Xcode | [Xcode menu command shortcuts (archive)](https://developer.apple.com/library/archive/documentation/IDEs/Conceptual/xcode_help-command_shortcuts/MenuCommands/MenuCommands014.html), [Running tests](https://developer.apple.com/library/archive/documentation/DeveloperTools/Conceptual/testing_with_xcode/chapters/05-running_tests.html) (⌘U) |
+| JetBrains IDEs | [macOS default keymap](https://www.jetbrains.com/help/idea/reference-keymap-mac-default.html), [Android Studio](https://developer.android.com/studio/intro/keyboard-shortcuts) |
+| Terminal | [Terminal keyboard shortcuts](https://support.apple.com/guide/terminal/keyboard-shortcuts-trmlshtcts/mac) |
+| iTerm2 | [iTerm2 documentation](https://iterm2.com/documentation-one-page.html) |
+| Shell keys | [zsh line editor](https://zsh.sourceforge.io/Doc/Release/Zsh-Line-Editor.html), `termios(4)` |
+| Chrome | [Chrome keyboard shortcuts](https://support.google.com/chrome/answer/157179?hl=en&co=GENIE.Platform%3DDesktop) |
+| Safari | [Safari keyboard shortcuts](https://support.apple.com/guide/safari/keyboard-and-other-shortcuts-cpsh003/mac) |
+| Firefox | [Firefox keyboard shortcuts](https://support.mozilla.org/en-US/kb/keyboard-shortcuts-perform-firefox-tasks-quickly) |
+| Finder, system-wide | [Mac keyboard shortcuts](https://support.apple.com/en-us/102650), [screenshots](https://support.apple.com/en-us/102646) |
+| Keynote | [Keynote keyboard shortcuts](https://support.apple.com/guide/keynote/keyboard-shortcuts-tanfde4a3e6d/mac) |
+| PowerPoint | [PowerPoint for Mac](https://support.microsoft.com/en-us/office/keyboard-shortcuts-in-powerpoint-for-mac-f25f92b3-b0a8-4c60-aec8-954b72aa81ad), [delivering presentations](https://support.microsoft.com/en-us/accessibility/powerpoint/use-keyboard-shortcuts-to-deliver-powerpoint-presentations) |
+| Figma | Help center: [group/frame](https://help.figma.com/hc/en-us/articles/360039832054), [actions menu](https://help.figma.com/hc/en-us/articles/23570416033943-Use-the-actions-menu-in-Figma-Design), [hide UI](https://help.figma.com/hc/en-us/articles/41414918021271-Hide-or-minimize-the-UI), [visibility](https://help.figma.com/hc/en-us/articles/360041112614-Toggle-visibility-to-hide-layers), [lock](https://help.figma.com/hc/en-us/articles/360041596573-Lock-and-unlock-layers), [components](https://help.figma.com/hc/en-us/articles/360038663154-Create-components-to-reuse-in-designs), [images](https://help.figma.com/hc/en-us/articles/360040028034-Add-images-and-videos-to-designs) |
+| Slack | [Slack keyboard shortcuts](https://slack.com/help/articles/201374536-Slack-keyboard-shortcuts) |
+| Notion | [Notion keyboard shortcuts](https://www.notion.com/help/keyboard-shortcuts) |
+| Zoom | [Zoom hotkeys](https://support.zoom.com/hc/en/article?id=zm_kb&sysparm_article=KB0067050) |
+| Microsoft Teams | [Teams keyboard shortcuts](https://support.microsoft.com/en-us/office/keyboard-shortcuts-for-microsoft-teams-2e8e2a70-e8d8-4a19-949b-4c36dd5292d2) |
+
+**Your own VS Code keybindings.** Keycaps › "Import VS Code keybindings…" opens a file panel
+(starting in `~/Library/Application Support/Code/User`); the sandbox can read only the file you
+pick. Keyray reads it as VS Code does (comments and trailing commas allowed) and keeps a copy in
+its settings, so re-import after changing the file. In VS Code, VS Code Insiders and VSCodium:
+
+- **Your bindings win.** `cmd+p` bound to `workbench.action.files.openRecent` shows "Open Recent".
+  Common commands have hand-written names; others are spelled out from the command id.
+- **Removed defaults** (`"-command"`) show no subtitle unless you bind the key again.
+- **`when` clauses:** Keyray can't see VS Code's context, so a key that does different things in
+  different places (your terminal binding vs. the default in the editor) shows no subtitle. A
+  `when` binding on a key nothing else uses is named.
+- **Skipped:** two-step chords (`cmd+k cmd+s`) and keys it can't read. The import summary counts
+  them.
+- **Undo:** "Remove imported keybindings" in the same menu.
 
 For demos without Input Monitoring:
 
@@ -111,8 +157,9 @@ open build/Keyray.app
 ```
 
 `scripts/bundle.sh` builds the release binary, writes `Info.plist` (`LSUIElement`, so there is no
-Dock icon), and signs ad hoc with `--options runtime` and `Resources/Keyray.entitlements`,
-which contains only `com.apple.security.app-sandbox`. Check the result with:
+Dock icon), and signs ad hoc with `--options runtime` and `Resources/Keyray.entitlements`:
+`com.apple.security.app-sandbox`, plus `com.apple.security.files.user-selected.read-only` for the
+keybindings import. Check the result with:
 
 ```sh
 codesign -dvv --entitlements - build/Keyray.app   # flags=0x10002(adhoc,runtime), app-sandbox

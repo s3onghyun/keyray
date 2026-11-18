@@ -97,6 +97,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var keycapLingerSeconds = 1.6
     /// Shortcut Subtitles: say what a shortcut does in the frontmost app, under the keycaps.
     public var keycapSubtitles = true
+    /// The user's own VS Code keybindings.json, if imported; it names shortcuts in VS Code.
+    public var vscodeKeybindings: ImportedKeybindings?
 
     public var laserColor = RGBA.laserRed
     public var laserTrailSeconds = 0.45
@@ -125,6 +127,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         theme = v(.theme, d.theme)
         greeted = v(.greeted, d.greeted)
         keycapSubtitles = v(.keycapSubtitles, d.keycapSubtitles)
+        vscodeKeybindings = v(.vscodeKeybindings, d.vscodeKeybindings)
         ringMode = v(.ringMode, d.ringMode)
         ringDiameter = v(.ringDiameter, d.ringDiameter)
         ringLineWidth = v(.ringLineWidth, d.ringLineWidth)
