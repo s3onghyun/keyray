@@ -269,6 +269,14 @@ let cmd: KeyModifiers = [.command]
     }
 }
 
+@Test func parkedThemesAreNotOffered() {
+    #expect(!Theme.offered.contains(.brushInk))
+    #expect(!Theme.offered.contains(.keynoteGlow))
+    #expect(Theme.offered == [.minimal, .firefly, .cyberpunk])
+    // A saved Brush & Ink choice still decodes and draws.
+    #expect(AppSettings.decoded(from: Data(#"{"theme": "brushInk"}"#.utf8)).theme == .brushInk)
+}
+
 @Test func hexColors() {
     #expect(RGBA(hex: 0xFF8000) == RGBA(1, 128.0 / 255, 0))
     #expect(RGBA(hex: 0x000000, alpha: 0.5).alpha == 0.5)

@@ -289,7 +289,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let themes = NSMenuItem(title: "Theme", action: nil, keyEquivalent: "")
         let themeMenu = NSMenu()
-        for theme in Theme.allCases {
+        for theme in Theme.offered {
             themeMenu.addItem(item(theme.title, checked: s.theme == theme) { $0.store.settings.theme = theme })
         }
         themes.submenu = themeMenu

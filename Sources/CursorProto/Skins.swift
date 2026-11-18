@@ -7,6 +7,18 @@ import CursorProtoCore
 enum Skin {
     /// The firefly companion's drawing box, in points.
     static let companionSize: CGFloat = 48
+    /// Center of the firefly's tail lantern in its box (y up, facing right).
+    static let lanternInBox = CGPoint(x: 14, y: 15)
+
+    /// The lantern's offset from the companion layer's center.
+    static func lanternOffset(facingLeft: Bool) -> CGPoint {
+        let x = lanternInBox.x - companionSize / 2
+        return CGPoint(x: facingLeft ? -x : x, y: lanternInBox.y - companionSize / 2)
+    }
+
+    /// Where the lantern touches the ring: lower right while the firefly leads to the right,
+    /// lower left when it leads to the left.
+    static func lanternAngle(facingLeft: Bool) -> CGFloat { (facingLeft ? 210 : -30) * .pi / 180 }
 
     // MARK: Ring
 
@@ -25,21 +37,69 @@ enum Skin {
             container.addSublayer(ring)
 
         case .firefly:
-            // A ring of small lights on a thin night-teal line.
-            let line = shape(circle)
-            line.fillColor = nil
-            line.strokeColor = style.ringOutline?.cg()
-            line.lineWidth = 1.5
-            let lights = shape(circle)
-            lights.fillColor = nil
-            lights.strokeColor = style.ring.cg()
-            lights.lineWidth = s.ringLineWidth + 2.5
-            lights.lineCap = .round
-            let gap = Double.pi * d / 12
-            lights.lineDashPattern = [0, NSNumber(value: gap)]
-            glow(lights, style.ring, radius: 3)
-            container.addSublayer(line)
-            container.addSublayer(lights)
+            // Light from the tail lantern: the ring is brightest where the lantern touches it
+            // and fades around the circle. The arc layer is turned toward the lantern (see
+            // `lanternAngle`) by the overlay when the firefly changes sides.
+            let r = d / 2, pad: CGFloat = 8
+            let base = shape(circle)
+            base.fillColor = nil
+            base.strokeColor = style.ringOutline?.cg()
+            base.lineWidth = 1.5
+            let warm = shape(circle)
+            warm.fillColor = style.ring.cg(alpha: 0.07)
+            warm.strokeColor = style.ring.cg(alpha: 0.3)
+            warm.lineWidth = s.ringLineWidth
+            glow(warm, style.ring, radius: 5)
+            let arc = CAGradientLayer()
+            arc.name = "lanternArc"
+            arc.type = .conic
+            arc.startPoint = CGPoint(x: 0.5, y: 0.5)
+            arc.endPoint = CGPoint(x: 1, y: 0.5)
+            // Strongest (deep amber) at the lantern; a near-white peak would vanish on light slides.
+            let peak = style.laser.cg(), lit = style.ring.cg(alpha: 0.75), dim = style.ring.cg(alpha: 0.12)
+            arc.colors = [peak, lit, dim, dim, lit, peak]
+            arc.locations = [0, 0.14, 0.42, 0.58, 0.86, 1]
+            arc.frame = CGRect(x: -r - pad, y: -r - pad, width: 2 * (r + pad), height: 2 * (r + pad))
+            arc.actions = ["transform": NSNull(), "position": NSNull(), "bounds": NSNull()]
+            arc.transform = CATransform3DMakeRotation(lanternAngle(facingLeft: false), 0, 0, 1)
+            let mask = CAShapeLayer()
+            mask.path = CGPath(ellipseIn: CGRect(x: pad, y: pad, width: 2 * r, height: 2 * r), transform: nil)
+            mask.fillColor = nil
+            mask.strokeColor = NSColor.white.cgColor
+            mask.lineWidth = s.ringLineWidth + 2
+            arc.mask = mask
+            container.addSublayer(base)
+            container.addSublayer(warm)
+            container.addSublayer(arc)
+
+        case .cyberpunk:
+            // A HUD reticle: four arcs with gaps at the compass points, short ticks in the gaps,
+            // each drawn twice (dark underlay for light slides, neon on top).
+            let r = d / 2
+            let quarter = Double.pi * d / 4, gapLen = quarter * 0.22
+            let ticks = CGMutablePath()
+            for i in 0..<4 {
+                let a = CGFloat(i) * .pi / 2
+                ticks.move(to: CGPoint(x: cos(a) * (r - 3), y: sin(a) * (r - 3)))
+                ticks.addLine(to: CGPoint(x: cos(a) * (r + 5), y: sin(a) * (r + 5)))
+            }
+            for (color, width, isGlow) in [(style.ringOutline ?? RGBA(0, 0, 0), s.ringLineWidth + 3, false), (style.ring, s.ringLineWidth, true)] {
+                let arcs = shape(circle)
+                arcs.fillColor = nil
+                arcs.strokeColor = color.cg()
+                arcs.lineWidth = width
+                arcs.lineDashPattern = [NSNumber(value: quarter - gapLen), NSNumber(value: gapLen)]
+                arcs.lineDashPhase = -gapLen / 2
+                let tick = shape(ticks)
+                tick.strokeColor = color.cg()
+                tick.lineWidth = isGlow ? 1.5 : 3.5
+                if isGlow {
+                    glow(arcs, color, radius: 3)
+                    glow(tick, color, radius: 2)
+                }
+                container.addSublayer(arcs)
+                container.addSublayer(tick)
+            }
 
         case .brushInk:
             // An ensō: one brush turn that thickens, then thins out before closing.
@@ -99,7 +159,9 @@ enum Skin {
     // MARK: Click effects
 
     /// A one-shot click effect at `point`, already animating; it removes itself when done.
-    static func addClickEffect(to root: CALayer, at point: CGPoint, button: MouseButton, settings s: AppSettings) {
+    /// `lantern` is where the firefly's tail lantern is, for the Firefly theme.
+    static func addClickEffect(to root: CALayer, at point: CGPoint, button: MouseButton, settings s: AppSettings,
+                               lantern: CGPoint? = nil) {
         let color = s.style.ripple(for: button)
         switch s.theme {
         case .minimal:
@@ -111,7 +173,15 @@ enum Skin {
                        duration: s.rippleDuration * 1.3, width: 2.5 - Double(i) * 0.5, glow: true, delay: Double(i) * 0.09)
             }
         case .firefly:
-            lightBurst(root: root, at: point, color: color, duration: s.rippleDuration)
+            // The tail pulses, a short beam reaches the click, and a ring of light spreads from it.
+            if let lantern {
+                lanternPulse(root: root, at: lantern)
+                beam(root: root, from: lantern, to: point, color: s.style.ring)
+            }
+            ripple(root: root, at: point, color: color, diameter: s.rippleDiameter, duration: s.rippleDuration,
+                   width: 2.5, glow: true, delay: lantern == nil ? 0 : 0.06)
+        case .cyberpunk:
+            targetLock(root: root, at: point, color: color, outline: s.style.ringOutline ?? RGBA(0, 0, 0), button: button)
         case .brushInk:
             sealStamp(root: root, at: point, color: color, button: button)
         }
@@ -143,29 +213,100 @@ enum Skin {
         run(layer, in: root, animations: [scale, alpha], duration: timing.duration, delay: delay)
     }
 
-    /// Six small lights thrown outward, glowing as they go.
-    private static func lightBurst(root: CALayer, at point: CGPoint, color: RGBA, duration: Double) {
-        let dots = CGMutablePath()
-        for i in 0..<6 {
-            let a = Double(i) * .pi / 3 + .pi / 6
-            let c = CGPoint(x: cos(a) * 11, y: sin(a) * 11)
-            dots.addEllipse(in: CGRect(x: c.x - 2.5, y: c.y - 2.5, width: 5, height: 5))
-        }
-        let layer = shape(dots)
-        layer.fillColor = color.cg()
-        glow(layer, color, radius: 4)
-        layer.position = point
-        layer.opacity = 0
-
+    /// The tail lantern flaring: a warm radial light that swells and fades.
+    private static func lanternPulse(root: CALayer, at point: CGPoint) {
+        let light = CAGradientLayer()
+        light.type = .radial
+        light.colors = [RGBA(hex: FireflyPalette.lanternCore).cg(), RGBA(hex: FireflyPalette.lightGlow, alpha: 0.75).cg(),
+                        RGBA(hex: FireflyPalette.lightGlow, alpha: 0).cg()]
+        light.locations = [0, 0.3, 1]
+        light.startPoint = CGPoint(x: 0.5, y: 0.5)
+        light.endPoint = CGPoint(x: 1, y: 1)
+        light.bounds = CGRect(x: 0, y: 0, width: 40, height: 40)
+        light.position = point
+        light.opacity = 0
         let scale = CABasicAnimation(keyPath: "transform.scale")
         scale.fromValue = 0.5
-        scale.toValue = 2.8
-        scale.timingFunction = CAMediaTimingFunction(controlPoints: 0.215, 0.61, 0.355, 1)
-        let alpha = CABasicAnimation(keyPath: "opacity")
-        alpha.fromValue = 1
-        alpha.toValue = 0
-        alpha.timingFunction = CAMediaTimingFunction(name: .easeIn)
-        run(layer, in: root, animations: [scale, alpha], duration: max(duration, 0.45), delay: 0)
+        scale.toValue = 1.8
+        scale.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        let alpha = CAKeyframeAnimation(keyPath: "opacity")
+        alpha.values = [0, 1, 0.8, 0]
+        alpha.keyTimes = [0, 0.15, 0.5, 1]
+        run(light, in: root, animations: [scale, alpha], duration: 0.5, delay: 0)
+    }
+
+    /// A short-lived line of light from the lantern to the click.
+    private static func beam(root: CALayer, from a: CGPoint, to b: CGPoint, color: RGBA) {
+        let path = CGMutablePath()
+        path.move(to: a)
+        path.addLine(to: b)
+        let line = shape(path)
+        line.strokeColor = color.cg(alpha: 0.9)
+        line.lineWidth = 2
+        line.lineCap = .round
+        glow(line, color, radius: 4)
+        line.opacity = 0
+        let draw = CABasicAnimation(keyPath: "strokeEnd")
+        draw.fromValue = 0
+        draw.toValue = 1
+        draw.duration = 0.08
+        let alpha = CAKeyframeAnimation(keyPath: "opacity")
+        alpha.values = [1, 1, 0]
+        alpha.keyTimes = [0, 0.4, 1]
+        run(line, in: root, animations: [draw, alpha], duration: 0.3, delay: 0)
+    }
+
+    /// Target-lock: four corner brackets snap onto the click, hold, then flicker out.
+    /// A small label names the button (LMB, RMB, MMB).
+    private static func targetLock(root: CALayer, at point: CGPoint, color: RGBA, outline: RGBA, button: MouseButton) {
+        let h: CGFloat = 17, arm: CGFloat = 7
+        let path = CGMutablePath()
+        for (sx, sy) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] as [(CGFloat, CGFloat)] {
+            path.move(to: CGPoint(x: sx * h, y: sy * (h - arm)))
+            path.addLine(to: CGPoint(x: sx * h, y: sy * h))
+            path.addLine(to: CGPoint(x: sx * (h - arm), y: sy * h))
+        }
+        let group = CALayer()
+        group.position = point
+        group.opacity = 0
+        let under = shape(path)
+        under.fillColor = nil
+        under.strokeColor = outline.cg()
+        under.lineWidth = 4.5
+        under.lineCap = .square
+        let neon = shape(path)
+        neon.fillColor = nil
+        neon.strokeColor = color.cg()
+        neon.lineWidth = 2
+        neon.lineCap = .square
+        glow(neon, color, radius: 3)
+        let label = CATextLayer()
+        label.string = button == .left ? "LMB" : button == .right ? "RMB" : "MMB"
+        label.font = NSFont.monospacedSystemFont(ofSize: 9, weight: .bold)
+        label.fontSize = 9
+        label.foregroundColor = color.cg()
+        label.backgroundColor = outline.cg()
+        label.alignmentMode = .center
+        label.contentsScale = 2
+        label.frame = CGRect(x: h + 3, y: h - 6, width: 24, height: 12)
+        group.addSublayer(under)
+        group.addSublayer(neon)
+        group.addSublayer(label)
+
+        let scale = CAKeyframeAnimation(keyPath: "transform.scale")
+        scale.values = [1.9, 1, 1]
+        scale.keyTimes = [0, 0.18, 1]
+        scale.timingFunctions = [CAMediaTimingFunction(name: .easeOut), CAMediaTimingFunction(name: .linear)]
+        // A hard flicker on the way out, like a HUD dropping the lock.
+        let alpha = CAKeyframeAnimation(keyPath: "opacity")
+        alpha.values = [0.4, 1, 1, 0, 1, 0.3, 0]
+        alpha.keyTimes = [0, 0.18, 0.62, 0.7, 0.78, 0.9, 1]
+        alpha.calculationMode = .discrete
+        let jitter = CAKeyframeAnimation(keyPath: "position.x")
+        jitter.values = [point.x, point.x, point.x + 2, point.x - 1, point.x]
+        jitter.keyTimes = [0, 0.62, 0.7, 0.78, 1]
+        jitter.calculationMode = .discrete
+        run(group, in: root, animations: [scale, alpha, jitter], duration: 0.65, delay: 0)
     }
 
     /// A seal (낙관) pressed where you click: square for left, round for right, oval for middle.
@@ -239,15 +380,35 @@ enum Skin {
             ribbon.fillColor = style.laser.cg(alpha: 0.8)
 
         case .firefly:
-            // The firefly's light: a warm halo around a near-white core.
+            // The laser point is the tail lantern itself (the overlay moves the firefly so its
+            // lantern sits on the point); this adds the lantern's halo, and the trail is its light.
             let halo = shape(CGPath(ellipseIn: CGRect(x: -dot, y: -dot, width: dot * 2, height: dot * 2), transform: nil))
-            halo.fillColor = style.laser.cg(alpha: 0.4)
-            glow(halo, style.laser, radius: 10)
+            halo.fillColor = RGBA(hex: FireflyPalette.lightGlow, alpha: 0.35).cg()
+            glow(halo, RGBA(hex: FireflyPalette.lightGlow), radius: 10)
+            container.addSublayer(halo)
+            ribbon.fillColor = style.laser.cg(alpha: 0.6)
+            ribbon.shadowColor = RGBA(hex: FireflyPalette.lightGlow).cg()
+            ribbon.shadowOpacity = 0.8
+            ribbon.shadowRadius = 4
+            ribbon.shadowOffset = .zero
+
+        case .cyberpunk:
+            // A neon beam: white-hot core, magenta glow.
+            let halo = shape(CGPath(ellipseIn: CGRect(x: -dot * 0.8, y: -dot * 0.8, width: dot * 1.6, height: dot * 1.6), transform: nil))
+            halo.fillColor = nil
+            halo.strokeColor = style.laser.cg()
+            halo.lineWidth = 2
+            glow(halo, style.laser, radius: 6)
             let core = shape(CGPath(ellipseIn: CGRect(x: -dot / 3, y: -dot / 3, width: dot / 1.5, height: dot / 1.5), transform: nil))
-            core.fillColor = RGBA(hex: 0xFFFBEA).cg()
+            core.fillColor = RGBA(1, 1, 1).cg()
+            glow(core, style.laser, radius: 4)
             container.addSublayer(halo)
             container.addSublayer(core)
-            ribbon.fillColor = style.laser.cg(alpha: 0.5)
+            ribbon.fillColor = style.laser.cg(alpha: 0.9)
+            ribbon.shadowColor = style.laser.cg()
+            ribbon.shadowOpacity = 1
+            ribbon.shadowRadius = 5
+            ribbon.shadowOffset = .zero
 
         case .brushInk:
             let tip = shape(circle)
@@ -308,23 +469,26 @@ enum Skin {
         func color(_ hex: UInt32, _ a: Double = 1) -> CGColor { RGBA(hex: hex, alpha: a).cg() }
         func ellipse(_ r: CGRect, _ fill: CGColor) { ctx.setFillColor(fill); ctx.fillEllipse(in: r) }
 
-        // Tail light and its glow.
-        let tail = CGPoint(x: 10, y: 13)
+        func mix(_ a: UInt32, _ b: UInt32, _ t: Double) -> CGColor {
+            let ca = RGBA(hex: a), cb = RGBA(hex: b)
+            return RGBA(ca.red + (cb.red - ca.red) * t, ca.green + (cb.green - ca.green) * t, ca.blue + (cb.blue - ca.blue) * t).cg()
+        }
+
+        // The tail lantern's glow: the only light on the firefly.
+        let lantern = CGPoint(x: lanternInBox.x - 6, y: lanternInBox.y - 2) // box -> this translated space
         if face.glow > 0.05 {
-            let glowColors = [color(FireflyPalette.lightGlow, 0.85 * face.glow), color(FireflyPalette.lightGlow, 0)] as CFArray
+            let glowColors = [color(FireflyPalette.lightGlow, 0.9 * face.glow), color(FireflyPalette.lightGlow, 0)] as CFArray
             if let g = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB), colors: glowColors, locations: [0, 1]) {
-                ctx.drawRadialGradient(g, startCenter: tail, startRadius: 0, endCenter: tail, endRadius: 6 + 9 * face.glow, options: [])
+                ctx.drawRadialGradient(g, startCenter: lantern, startRadius: 2, endCenter: lantern, endRadius: 7 + 12 * face.glow, options: [])
             }
         }
-        ellipse(CGRect(x: tail.x - 6, y: tail.y - 5, width: 12, height: 10),
-                color(FireflyPalette.light, 0.45 + 0.55 * face.glow))
 
-        // Back wing, body, front wing.
-        func wing(_ origin: CGPoint, _ angle: Double, _ alpha: Double) {
+        // Wings sit up over the back so they never cover the lantern.
+        func wing(_ origin: CGPoint, _ direction: Double, _ alpha: Double) {
             ctx.saveGState()
             ctx.translateBy(x: origin.x, y: origin.y)
-            ctx.rotate(by: CGFloat((90 + angle) * .pi / 180))
-            let r = CGRect(x: -4, y: -1, width: 8, height: 15)
+            ctx.rotate(by: CGFloat((direction - 90) * .pi / 180))
+            let r = CGRect(x: -3.6, y: 0, width: 7.2, height: 14)
             ctx.setFillColor(color(FireflyPalette.wing, alpha))
             ctx.fillEllipse(in: r)
             ctx.setStrokeColor(color(FireflyPalette.body, 0.5))
@@ -332,10 +496,37 @@ enum Skin {
             ctx.strokeEllipse(in: r)
             ctx.restoreGState()
         }
-        wing(CGPoint(x: 19, y: 22), face.wing + 12, 0.5)
-        ellipse(CGRect(x: 10, y: 8, width: 20, height: 17), color(FireflyPalette.body))
-        ellipse(CGRect(x: 12, y: 8, width: 16, height: 6), color(FireflyPalette.bodyShade, 0.6))
-        wing(CGPoint(x: 17, y: 21), face.wing, 0.75)
+        let wingDirection = 150 - face.wing * 1.2
+        wing(CGPoint(x: 20, y: 22), wingDirection - 14, 0.45)
+
+        // Body (thorax) and the dark front of the abdomen.
+        ellipse(CGRect(x: 12, y: 9, width: 18, height: 15), color(FireflyPalette.body))
+        ellipse(CGRect(x: 6.5, y: 8, width: 12, height: 11), color(FireflyPalette.bodyShade))
+
+        // The lantern: the last abdomen segments, lit from inside.
+        let lanternRect = CGRect(x: lantern.x - 6.5, y: lantern.y - 6, width: 13, height: 12)
+        ctx.saveGState()
+        ctx.addEllipse(in: lanternRect)
+        ctx.clip()
+        // Lit unless dozing: even the resting lantern reads as a light.
+        let lit = face.glow < 0.3 ? face.glow : 0.55 + face.glow * 0.45
+        let core = mix(FireflyPalette.lanternOff, FireflyPalette.lanternCore, lit)
+        let rim = mix(FireflyPalette.lanternOff, FireflyPalette.lanternRim, lit)
+        if let g = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB), colors: [core, rim] as CFArray, locations: [0, 1]) {
+            ctx.drawRadialGradient(g, startCenter: CGPoint(x: lantern.x - 1, y: lantern.y + 1), startRadius: 0,
+                                   endCenter: lantern, endRadius: 7.5, options: [.drawsAfterEndLocation])
+        }
+        ctx.restoreGState()
+        ctx.setStrokeColor(color(FireflyPalette.body, 0.5))
+        ctx.setLineWidth(0.8)
+        ctx.strokeEllipse(in: lanternRect)
+        // Segment line across the lantern.
+        ctx.move(to: CGPoint(x: lantern.x + 1.5, y: lantern.y + 5.5))
+        ctx.addQuadCurve(to: CGPoint(x: lantern.x + 1.5, y: lantern.y - 5.5), control: CGPoint(x: lantern.x - 1, y: lantern.y))
+        ctx.setStrokeColor(color(FireflyPalette.body, 0.35))
+        ctx.strokePath()
+
+        wing(CGPoint(x: 18, y: 21), wingDirection, 0.75)
 
         // Head, tilted toward the cursor.
         ctx.saveGState()
@@ -344,7 +535,7 @@ enum Skin {
         ctx.rotate(by: CGFloat(-face.tilt * .pi / 180))
         ctx.translateBy(x: -neck.x, y: -neck.y)
 
-        // Antennae with small lit tips.
+        // Antennae with small knobs (unlit: the lantern is the only light).
         ctx.setStrokeColor(color(FireflyPalette.body))
         ctx.setLineWidth(1.4)
         ctx.setLineCap(.round)
@@ -353,7 +544,7 @@ enum Skin {
             ctx.move(to: base)
             ctx.addQuadCurve(to: tip, control: ctl)
             ctx.strokePath()
-            ellipse(CGRect(x: tip.x - 1.8, y: tip.y - 1.8, width: 3.6, height: 3.6), color(FireflyPalette.light))
+            ellipse(CGRect(x: tip.x - 1.8, y: tip.y - 1.8, width: 3.6, height: 3.6), color(FireflyPalette.body))
         }
 
         ellipse(CGRect(x: 19, y: 15, width: 18, height: 18), color(FireflyPalette.body))
@@ -411,6 +602,7 @@ enum Skin {
         switch theme {
         case .minimal: return NSImage(systemSymbolName: "cursorarrow.rays", accessibilityDescription: "Cursor highlighter")
         case .brushInk: return NSImage(systemSymbolName: "paintbrush.pointed", accessibilityDescription: "Cursor highlighter")
+        case .cyberpunk: return NSImage(systemSymbolName: "scope", accessibilityDescription: "Cursor highlighter")
         case .keynoteGlow: return NSImage(systemSymbolName: "sparkles", accessibilityDescription: "Cursor highlighter")
         case .firefly:
             let image = NSImage(size: NSSize(width: 22, height: 22), flipped: false) { rect in
