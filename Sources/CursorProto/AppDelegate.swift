@@ -44,7 +44,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         for s in AppShortcut.permanent { hotKeys.register(s) }
         Log.app.notice("hotkeys registered: \(self.hotKeys.registered.map(\.rawValue).joined(separator: ","), privacy: .public)")
 
-        installMouseMonitors()
         setUpStatusItem()
 
         store.$settings.dropFirst().sink { [weak self] s in
@@ -74,6 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Mouse position and clicks from every app. NSEvent's global monitor needs no permission for
     /// mouse events (only key events require Accessibility), so this works in the sandbox as is.
     private func installMouseMonitors() {
+        guard monitors.isEmpty else { return }
         let mask: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDown, .leftMouseUp, .leftMouseDragged,
                                            .rightMouseDown, .rightMouseUp, .rightMouseDragged,
                                            .otherMouseDown, .otherMouseUp, .otherMouseDragged]
@@ -88,6 +88,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return e
         }) { monitors.append(local) }
         Log.app.notice("mouse monitors installed: \(self.monitors.count)")
+    }
+
+    /// While everything is hidden the app stops receiving mouse events altogether.
+    private func removeMouseMonitors() {
+        guard !monitors.isEmpty else { return }
+        for m in monitors { NSEvent.removeMonitor(m) }
+        monitors.removeAll()
+        Log.app.notice("mouse monitors removed")
     }
 
     private func perform(_ shortcut: AppShortcut) {
@@ -144,6 +152,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func updateVisibility() {
         let show = hideReasons.isEmpty
         if !show && overlay.inkArmed { setInk(false) }
+        if show { installMouseMonitors() } else { removeMouseMonitors() }
         overlay.setVisible(show)
         keycaps.setSuppressed(!show)
     }
@@ -218,6 +227,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             onboardingWindow = w
         }
         refreshOnboarding()
+        if let w = onboardingWindow, let size = w.contentViewController?.view.fittingSize { w.setContentSize(size) }
         onboardingWindow?.center()
         NSApp.activate(ignoringOtherApps: true)
         onboardingWindow?.makeKeyAndOrderFront(nil)
@@ -299,6 +309,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if s.keycapMode != .off && keyTap.state != .running {
             menu.addItem(item("Set up Input Monitoring…", indent: 1) { $0.showOnboarding() })
         }
+        menu.addItem(item("Preview keycaps", indent: 1) { $0.keycaps.preview() })
         menu.addItem(item(keycaps.isPositioning ? "Done moving keycaps" : "Move keycaps…", indent: 1) { d in
             if d.keycaps.isPositioning { d.keycaps.endPositioning() } else { d.keycaps.beginPositioning() }
         })
@@ -344,6 +355,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             w.isReleasedWhenClosed = false
             settingsWindow = w
         }
+        if let w = settingsWindow, let size = w.contentViewController?.view.fittingSize { w.setContentSize(size) }
         settingsWindow?.center()
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow?.makeKeyAndOrderFront(nil)

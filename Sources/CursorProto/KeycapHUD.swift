@@ -71,6 +71,31 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
         render()
     }
 
+    /// Plays a sample sequence through the real feed and HUD, so the look and position can be
+    /// checked without Input Monitoring. Uses "shortcuts only" when keycaps are off.
+    func preview() {
+        let saved = feed.mode
+        if feed.mode == .off { feed.mode = .shortcutsOnly }
+        let cmd: KeyModifiers = [.command]
+        let steps: [(Double, KeyStroke, Bool)] = [
+            (0.0, KeyStroke(keyCode: 8, modifiers: cmd), false), // ⌘C
+            (0.6, KeyStroke(keyCode: 9, modifiers: cmd), false), // ⌘V
+            (1.3, KeyStroke(keyCode: 6, modifiers: cmd), false), // ⌘Z
+            (1.6, KeyStroke(keyCode: 6, modifiers: cmd), false),
+            (1.9, KeyStroke(keyCode: 6, modifiers: cmd), false),
+            (2.3, AppShortcut.toggleLaser.stroke, false), // hidden when "hide activation keys" is on
+            (2.7, KeyStroke(keyCode: 40, modifiers: [.shift, .command]), false), // ⇧⌘K
+        ]
+        for (delay, stroke, isRepeat) in steps {
+            Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+                MainActor.assumeIsolated { self?.record(stroke, isRepeat: isRepeat) }
+            }
+        }
+        Timer.scheduledTimer(withTimeInterval: 2.8, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.feed.mode = saved }
+        }
+    }
+
     /// Drag-to-position mode: shows a sample cap that can be dragged; ends with `endPositioning`.
     func beginPositioning() {
         isPositioning = true

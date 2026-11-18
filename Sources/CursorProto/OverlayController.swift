@@ -155,7 +155,9 @@ final class OverlayController {
     /// monitor (our own overlay while ink mode holds the mouse).
     func handle(_ event: NSEvent) {
         guard visible else { return }
-        let global = NSEvent.mouseLocation
+        // Global-monitor events carry screen coordinates already; reading the event avoids asking
+        // the window server for the cursor position on every move.
+        let global = event.window.map { $0.convertPoint(toScreen: event.locationInWindow) } ?? event.locationInWindow
         switch event.type {
         case .mouseMoved, .rightMouseDragged, .otherMouseDragged:
             moved(to: global)
@@ -199,8 +201,8 @@ final class OverlayController {
                 w.root.addSublayer(laserRibbon)
             }
             let p = w.local(global)
+            // The trail is redrawn once per frame by the laser timer, not once per mouse event.
             trail.add(Point(p.x, p.y), time: lastMove)
-            redrawTrail()
             startLaserTimer()
         }
     }

@@ -17,9 +17,11 @@ final class OverlayWindow: NSPanel {
         configureAsOverlay(self)
         setFrame(screen.frame, display: false)
 
+        // Layer-hosting (layer set before wantsLayer): AppKit leaves the layer tree alone, so moving
+        // the ring is a bare Core Animation commit without an AppKit display pass.
         let view = NSView(frame: NSRect(origin: .zero, size: screen.frame.size))
-        view.wantsLayer = true
         view.layer = root
+        view.wantsLayer = true
         root.masksToBounds = false
         contentView = view
     }
