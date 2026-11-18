@@ -240,3 +240,86 @@ let cmd: KeyModifiers = [.command]
     #expect(Set(strokes).count == strokes.count)
     #expect(!AppShortcut.permanent.contains(.exitInk))
 }
+
+// MARK: - Themes
+
+@Test func themeRoundTripsAndUnknownFallsBack() throws {
+    var s = AppSettings()
+    s.theme = .brushInk
+    #expect(AppSettings.decoded(from: try s.encoded()).theme == .brushInk)
+    #expect(AppSettings.decoded(from: Data(#"{"theme": "neon"}"#.utf8)).theme == .minimal)
+}
+
+@Test func minimalStyleUsesTheUsersColors() {
+    var s = AppSettings()
+    s.ringColor = RGBA(0.1, 0.2, 0.3)
+    s.rippleRight = RGBA(0.4, 0.5, 0.6)
+    #expect(s.style.ring == s.ringColor)
+    #expect(s.style.ripple(for: .right) == s.rippleRight)
+    s.theme = .firefly
+    #expect(s.style.ring != s.ringColor)
+}
+
+@Test func everyThemeKeepsTheThreeButtonsApart() {
+    for theme in Theme.allCases {
+        var s = AppSettings()
+        s.theme = theme
+        let colors = MouseButton.allCases.map { "\(s.style.ripple(for: $0))" }
+        #expect(Set(colors).count == 3, "\(theme)")
+    }
+}
+
+@Test func hexColors() {
+    #expect(RGBA(hex: 0xFF8000) == RGBA(1, 128.0 / 255, 0))
+    #expect(RGBA(hex: 0x000000, alpha: 0.5).alpha == 0.5)
+}
+
+// MARK: - Firefly companion
+
+@Test func companionFliesReactsAndSettles() {
+    var c = CompanionAnimator()
+    #expect(c.pose(at: 0) == .rest)
+    #expect(c.pose(at: 0, idle: true) == .doze)
+    #expect(c.pose(at: 0, laser: true) == .focus)
+    #expect(c.nextChange(after: 0) == nil)
+
+    c.moved(dx: 5, dy: 0, time: 1)
+    #expect(c.pose(at: 1) == .flyA)
+    c.moved(dx: c.strokeLength, dy: 0, time: 1.05)
+    #expect(c.pose(at: 1.05) == .flyB)
+    #expect(!c.facingLeft)
+    c.moved(dx: -3, dy: 0, time: 1.1)
+    #expect(c.facingLeft)
+    #expect(c.nextChange(after: 1.1) == 1.1 + c.settleDelay)
+    #expect(c.pose(at: 1.1 + c.settleDelay) == .rest)
+
+    c.clicked(.left, time: 2)
+    #expect(c.pose(at: 2.1) == .happy)
+    #expect(c.nextChange(after: 2.1) == 2 + c.glowAt)
+    #expect(c.pose(at: 2 + c.glowAt + 0.01) == .glow)
+    #expect(c.pose(at: 2 + c.reactionDuration) == .rest)
+    #expect(c.nextChange(after: 2 + c.reactionDuration) == nil)
+
+    c.clicked(.right, time: 3)
+    #expect(c.pose(at: 3.5) == .curious)
+    #expect(c.nextChange(after: 3.1) == 3 + c.reactionDuration)
+}
+
+@Test func everyPoseHasADistinctFace() {
+    let faces = CompanionPose.allCases.map { CompanionFace.of($0) }
+    #expect(Set(faces.map { "\($0)" }).count == faces.count)
+    #expect(faces.allSatisfy { (0...1).contains($0.glow) })
+    // The laser pose keeps the tail at full light; dozing nearly turns it off.
+    #expect(CompanionFace.of(.focus).glow == 1)
+    #expect(CompanionFace.of(.doze).glow < CompanionFace.of(.rest).glow)
+}
+
+@Test func stampDropsHoldsAndFades() {
+    let t = StampTiming()
+    #expect(t.scale(age: 0) == t.startScale)
+    #expect(t.scale(age: t.land) == 1)
+    #expect(t.alpha(age: -0.1) == 0)
+    #expect(t.alpha(age: t.land + t.hold / 2) == 1)
+    #expect(t.alpha(age: t.duration) == 0)
+    #expect(abs(t.alpha(age: t.land + t.hold + t.fade / 2) - 0.5) < 1e-9)
+}

@@ -270,7 +270,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if !settings.enabled { name = "cursorarrow.slash" }
         else if overlay?.inkArmed == true { name = "pencil.tip" }
         else if overlay?.laserOn == true { name = "light.max" }
-        else { name = "cursorarrow.rays" }
+        else {
+            statusItem?.button?.image = Skin.menuBarImage(theme: settings.theme)
+            return
+        }
         statusItem?.button?.image = NSImage(systemSymbolName: name, accessibilityDescription: "Cursor highlighter")
     }
 
@@ -282,6 +285,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let s = settings
 
         menu.addItem(item("Overlays On", shortcut: .toggleOverlays, checked: s.enabled) { $0.store.settings.enabled.toggle() })
+        menu.addItem(.separator())
+
+        let themes = NSMenuItem(title: "Theme", action: nil, keyEquivalent: "")
+        let themeMenu = NSMenu()
+        for theme in Theme.allCases {
+            themeMenu.addItem(item(theme.title, checked: s.theme == theme) { $0.store.settings.theme = theme })
+        }
+        themes.submenu = themeMenu
+        menu.addItem(themes)
         menu.addItem(.separator())
 
         menu.addItem(header("Cursor"))

@@ -23,7 +23,20 @@ Hardened Runtime on, no Accessibility and no Screen Recording permission.
 With the overlays switched off (⌃⌥⌘O, or while a permission prompt is in front) the app removes its
 mouse monitors, so it receives no events and uses no CPU.
 
-Character skins are out of scope for now; the default style is deliberately minimal.
+### Themes
+
+Menu › Theme (or Settings) switches the look of every overlay; behavior and timing stay the same.
+
+| Theme | Ring | Click | Laser | Keycaps |
+|---|---|---|---|---|
+| Minimal (default) | colored ring | ripple, color per button | dot and tapered trail | dark glass |
+| Firefly (working name) | circle of small lights, plus a firefly companion that reacts to clicks, holds its light while the laser is on and dozes when idle | glowing dots | warm light | night-teal plaques |
+| Brush & Ink | ink ensō | seal stamp: square, round, oval per button | bleeding brush trail | hanji tags |
+| Keynote Glow | simulated glass ring | droplet ripples | radial glow | system frosted glass |
+
+The theme sets its own colors; the color pickers apply to Minimal. The companion is drawn with
+Core Graphics, and its poses come from an event-driven animator in `CursorProtoCore`, so a still
+cursor needs no timer.
 
 ### Shortcuts
 
