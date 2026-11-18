@@ -6,6 +6,15 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            Section("Theme") {
+                Picker("Theme", selection: $store.settings.theme) {
+                    ForEach(Theme.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                if store.settings.theme != .minimal {
+                    Text("The theme sets its own colors; the color pickers below apply to Minimal.")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+            }
             Section("Cursor ring") {
                 Picker("Show", selection: $store.settings.ringMode) {
                     Text("Always").tag(RingMode.always)

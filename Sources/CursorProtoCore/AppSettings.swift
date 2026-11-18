@@ -68,6 +68,7 @@ public enum InkInput: String, Codable, CaseIterable, Sendable {
 /// clamps out-of-range numbers, so an old or hand-edited preference can never break the app.
 public struct AppSettings: Codable, Equatable, Sendable {
     public var enabled = true
+    public var theme = Theme.minimal
 
     public var ringMode = RingMode.always
     public var ringDiameter = 44.0
@@ -116,6 +117,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
             (try? c.decodeIfPresent(T.self, forKey: key)) ?? fallback
         }
         enabled = v(.enabled, d.enabled)
+        theme = v(.theme, d.theme)
         ringMode = v(.ringMode, d.ringMode)
         ringDiameter = v(.ringDiameter, d.ringDiameter)
         ringLineWidth = v(.ringLineWidth, d.ringLineWidth)

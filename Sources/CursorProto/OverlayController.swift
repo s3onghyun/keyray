@@ -10,9 +10,15 @@ final class OverlayController {
     private var settings: AppSettings
     private var visible = false
 
-    private let ring = CAShapeLayer()
-    private let laserDot = CAShapeLayer()
+    /// Containers positioned at the cursor; the theme fills them (see `Skin`).
+    private let ring = CALayer()
+    private let laserDot = CALayer()
     private let laserRibbon = CAShapeLayer()
+    private let companion = CALayer()
+    private var companionAnim = CompanionAnimator()
+    private var companionTimer: Timer?
+    private var companionKey = ""
+    private var lastCursor: CGPoint?
     private var trail: LaserTrail
     private var trailWindow: OverlayWindow?
     private var laserTimer: Timer?
@@ -55,17 +61,16 @@ final class OverlayController {
     init(settings: AppSettings) {
         self.settings = settings
         trail = LaserTrail(duration: settings.laserTrailSeconds, maxWidth: settings.laserWidth)
-        for layer in [ring, laserDot, laserRibbon] {
-            layer.actions = ["position": NSNull(), "path": NSNull(), "bounds": NSNull()]
+        for layer in [ring, laserDot, laserRibbon, companion] {
+            layer.actions = ["position": NSNull(), "path": NSNull(), "bounds": NSNull(), "contents": NSNull(), "transform": NSNull()]
             layer.opacity = 0
         }
         laserRibbon.opacity = 1
         laserRibbon.zPosition = 1
         laserDot.zPosition = 2
         ring.zPosition = 3
-        laserDot.shadowRadius = 8
-        laserDot.shadowOpacity = 1
-        laserDot.shadowOffset = .zero
+        companion.zPosition = 4
+        companion.bounds = CGRect(x: 0, y: 0, width: Skin.companionSize, height: Skin.companionSize)
         apply(settings)
         rebuildWindows()
     }
@@ -74,22 +79,14 @@ final class OverlayController {
 
     func apply(_ s: AppSettings) {
         settings = s
-        trail.duration = s.laserTrailSeconds
-        trail.maxWidth = s.laserWidth
+        trail.duration = s.laserTrailSeconds * s.style.laserTrailScale
+        trail.maxWidth = s.laserWidth * (s.theme == .keynoteGlow ? 1.8 : 1)
+        Skin.buildRing(into: ring, settings: s)
+        Skin.styleLaser(tip: laserDot, ribbon: laserRibbon, settings: s)
+        companionKey = ""
+        refreshCompanion()
 
-        let d = s.ringDiameter
-        ring.path = CGPath(ellipseIn: CGRect(x: -d / 2, y: -d / 2, width: d, height: d), transform: nil)
-        ring.fillColor = s.ringColor.cg(alpha: 0.12)
-        ring.strokeColor = s.ringColor.cg()
-        ring.lineWidth = s.ringLineWidth
-
-        let dot = max(s.laserWidth * 1.3, 8)
-        laserDot.path = CGPath(ellipseIn: CGRect(x: -dot / 2, y: -dot / 2, width: dot, height: dot), transform: nil)
-        laserDot.fillColor = s.laserColor.cg()
-        laserDot.shadowColor = s.laserColor.cg()
-        laserRibbon.fillColor = s.laserColor.cg(alpha: 0.8)
-
-        for border in inkBorders { border.borderColor = s.inkColor.cg(alpha: 0.45) }
+        for border in inkBorders { border.borderColor = s.style.pen.cg(alpha: 0.45) }
         if !s.enabled { setVisible(false) }
         updateCursorLayers(animated: false)
     }
@@ -106,7 +103,7 @@ final class OverlayController {
             let border = CALayer()
             border.frame = w.root.bounds
             border.borderWidth = 3
-            border.borderColor = settings.inkColor.cg(alpha: 0.45)
+            border.borderColor = settings.style.pen.cg(alpha: 0.45)
             border.isHidden = true
             border.zPosition = 10
             w.root.addSublayer(border)
@@ -211,15 +208,27 @@ final class OverlayController {
         guard let w = window(containing: global) else { return }
         if cursorWindow !== w {
             cursorWindow = w
+            lastCursor = nil
             w.root.addSublayer(ring)
             w.root.addSublayer(laserDot)
+            w.root.addSublayer(companion)
         }
         let p = w.local(global)
+        if settings.theme == .firefly, let last = lastCursor {
+            companionAnim.moved(dx: p.x - last.x, dy: p.y - last.y, time: CACurrentMediaTime())
+        }
+        lastCursor = p
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         ring.position = p
         laserDot.position = p
+        if settings.theme == .firefly {
+            // Hovers just below and behind the cursor, on the side it came from, facing it.
+            let side: CGFloat = companionAnim.facingLeft ? 28 : -28
+            companion.position = CGPoint(x: p.x + side, y: p.y - 26)
+        }
         CATransaction.commit()
+        refreshCompanion()
     }
 
     private func pressed(_ button: MouseButton, at global: NSPoint) {
@@ -228,8 +237,12 @@ final class OverlayController {
         if inkArmed && button == .left {
             autoReleaseTimer?.invalidate()
             beginStroke(at: global)
-        } else if settings.ripplesEnabled {
-            ripple(at: global, button: button)
+        } else if settings.ripplesEnabled, let w = window(containing: global) {
+            Skin.addClickEffect(to: w.root, at: w.local(global), button: button, settings: settings)
+        }
+        if settings.theme == .firefly && !inkArmed {
+            companionAnim.clicked(button, time: CACurrentMediaTime())
+            refreshCompanion()
         }
         animateRingScale(0.82)
         updateCursorLayers(animated: true)
@@ -258,8 +271,13 @@ final class OverlayController {
     }
 
     private func updateCursorLayers(animated: Bool) {
+        let laserShown = visible && laserOn && !idleHidden
         fade(ring, to: ringWanted ? Float(settings.ringOpacity) : 0, animated: animated)
-        fade(laserDot, to: visible && laserOn && !idleHidden ? 1 : 0, animated: animated)
+        fade(laserDot, to: laserShown ? 1 : 0, animated: animated)
+        // The firefly stays, dimmed and dozing, when the ring hides for idle; it leaves with the ring otherwise.
+        let companionShown = visible && settings.theme == .firefly && settings.ringMode != .off && (ringWanted || laserShown || idleHidden)
+        fade(companion, to: companionShown ? (idleHidden ? 0.6 : 1) : 0, animated: animated)
+        refreshCompanion()
     }
 
     private func fade(_ layer: CALayer, to opacity: Float, animated: Bool) {
@@ -309,37 +327,30 @@ final class OverlayController {
         }
     }
 
-    // MARK: Ripples
+    // MARK: Companion
 
-    private func ripple(at global: NSPoint, button: MouseButton) {
-        guard let w = window(containing: global) else { return }
-        let timing = RippleTiming(duration: settings.rippleDuration)
-        let d = settings.rippleDiameter
-        let layer = CAShapeLayer()
-        layer.path = CGPath(ellipseIn: CGRect(x: -d / 2, y: -d / 2, width: d, height: d), transform: nil)
-        let color = settings.rippleColor(for: button)
-        layer.fillColor = color.cg(alpha: 0.18)
-        layer.strokeColor = color.cg()
-        layer.lineWidth = 3
-        layer.position = w.local(global)
-        layer.opacity = 0
-
-        let scale = CABasicAnimation(keyPath: "transform.scale")
-        scale.fromValue = timing.startScale
-        scale.toValue = 1
-        scale.timingFunction = CAMediaTimingFunction(controlPoints: 0.215, 0.61, 0.355, 1) // ease-out cubic
-        let alpha = CABasicAnimation(keyPath: "opacity")
-        alpha.fromValue = timing.startAlpha
-        alpha.toValue = 0
-        let group = CAAnimationGroup()
-        group.animations = [scale, alpha]
-        group.duration = timing.duration
-
-        CATransaction.begin()
-        CATransaction.setCompletionBlock { layer.removeFromSuperlayer() }
-        w.root.addSublayer(layer)
-        layer.add(group, forKey: "ripple")
-        CATransaction.commit()
+    /// Shows the companion's current pose; a one-shot timer covers changes with no input
+    /// (settling to stand, the salute's sparkle and end), so a still cursor costs nothing.
+    private func refreshCompanion() {
+        guard settings.theme == .firefly else { return }
+        let now = CACurrentMediaTime()
+        let pose = companionAnim.pose(at: now, laser: laserOn, idle: idleHidden)
+        let key = "\(pose.rawValue)-\(companionAnim.facingLeft)"
+        if key != companionKey {
+            companionKey = key
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            companion.contents = Skin.companionImage(pose, mirrored: companionAnim.facingLeft)
+            companion.contentsScale = 2
+            CATransaction.commit()
+        }
+        guard companionTimer == nil, let next = companionAnim.nextChange(after: now) else { return }
+        companionTimer = Timer.scheduledTimer(withTimeInterval: max(next - now, 0.02), repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.companionTimer = nil
+                self?.refreshCompanion()
+            }
+        }
     }
 
     // MARK: Laser trail
@@ -386,7 +397,7 @@ final class OverlayController {
     private func beginStroke(at global: NSPoint) {
         finishStroke()
         guard let w = window(containing: global) else { return }
-        let s = InkStroke(tool: settings.inkTool, color: settings.inkColor, start: w.local(global))
+        let s = InkStroke(tool: settings.inkTool, style: settings.style, theme: settings.theme, start: w.local(global))
         w.root.addSublayer(s.layer)
         stroke = s
         strokeWindow = w
@@ -449,7 +460,7 @@ final class InkStroke {
     let tool: InkTool
     private var points: [CGPoint]
 
-    init(tool: InkTool, color: RGBA, start: CGPoint) {
+    init(tool: InkTool, style: ThemeStyle, theme: Theme, start: CGPoint) {
         self.tool = tool
         points = [start]
         layer.actions = ["path": NSNull()]
@@ -458,20 +469,38 @@ final class InkStroke {
         layer.lineJoin = .round
         switch tool {
         case .pen:
-            layer.strokeColor = color.cg()
-            layer.lineWidth = 4
+            layer.strokeColor = style.pen.cg()
+            layer.lineWidth = theme == .brushInk ? 5 : 4
         case .arrow:
-            layer.strokeColor = color.cg()
+            layer.strokeColor = style.pen.cg()
             layer.lineWidth = 5
         case .highlighter:
-            layer.strokeColor = RGBA.highlighterYellow.cg(alpha: 0.4)
+            layer.strokeColor = style.highlighter.cg()
             layer.lineWidth = 22
             layer.lineCap = .butt
         }
-        layer.shadowColor = NSColor.black.cgColor
-        layer.shadowOpacity = tool == .highlighter ? 0 : 0.25
-        layer.shadowRadius = 1.5
-        layer.shadowOffset = CGSize(width: 0, height: -1)
+        switch theme {
+        case .brushInk: // ink bleeding into paper
+            layer.shadowColor = style.pen.cg()
+            layer.shadowOpacity = tool == .highlighter ? 0 : 0.5
+            layer.shadowRadius = 2
+            layer.shadowOffset = .zero
+        case .keynoteGlow:
+            layer.shadowColor = style.pen.cg()
+            layer.shadowOpacity = tool == .highlighter ? 0 : 0.6
+            layer.shadowRadius = 4
+            layer.shadowOffset = .zero
+        case .firefly: // a faint warm glow along the stroke
+            layer.shadowColor = RGBA(hex: FireflyPalette.lightGlow).cg()
+            layer.shadowOpacity = tool == .highlighter ? 0 : 0.7
+            layer.shadowRadius = 2.5
+            layer.shadowOffset = .zero
+        case .minimal:
+            layer.shadowColor = NSColor.black.cgColor
+            layer.shadowOpacity = tool == .highlighter ? 0 : 0.25
+            layer.shadowRadius = 1.5
+            layer.shadowOffset = CGSize(width: 0, height: -1)
+        }
         redraw()
     }
 
@@ -508,17 +537,4 @@ final class InkStroke {
         }
         layer.path = path
     }
-}
-
-extension RGBA {
-    func cg(alpha: Double? = nil) -> CGColor {
-        CGColor(srgbRed: red, green: green, blue: blue, alpha: alpha ?? self.alpha)
-    }
-
-    init(_ color: NSColor) {
-        let c = color.usingColorSpace(.sRGB) ?? .white
-        self.init(Double(c.redComponent), Double(c.greenComponent), Double(c.blueComponent), Double(c.alphaComponent))
-    }
-
-    var nsColor: NSColor { NSColor(srgbRed: red, green: green, blue: blue, alpha: alpha) }
 }

@@ -123,7 +123,7 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
             window.orderOut(nil)
             return
         }
-        for t in texts { stack.addArrangedSubview(Self.cap(t, dashed: isPositioning)) }
+        for t in texts { stack.addArrangedSubview(cap(t, dashed: isPositioning)) }
         window.setContentSize(stack.fittingSize)
         place()
         window.orderFrontRegardless()
@@ -156,16 +156,54 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
         onMoved?(UnitPoint(x: (f.midX - vf.minX) / vf.width, y: (f.midY - vf.minY) / vf.height))
     }
 
-    private static func cap(_ text: String, dashed: Bool) -> NSView {
+    /// One cap in the theme's style: dark glass (Minimal), night-teal plaque with a light (Firefly),
+    /// hanji tag with a seal mark (Brush & Ink) or frosted glass (Keynote Glow).
+    private func cap(_ text: String, dashed: Bool) -> NSView {
+        let style = settings.style
         let label = NSTextField(labelWithString: text)
-        label.font = .systemFont(ofSize: 30, weight: .semibold)
-        label.textColor = .white
-        let box = NSView()
+        label.textColor = style.keycapText.nsColor
+        switch settings.theme {
+        case .firefly:
+            label.font = .systemFont(ofSize: 30, weight: .bold)
+        case .brushInk:
+            label.font = NSFont(name: "AppleMyungjo", size: 30) ?? .systemFont(ofSize: 30)
+        case .minimal, .keynoteGlow:
+            label.font = .systemFont(ofSize: 30, weight: .semibold)
+        }
+        let box: NSView
+        if settings.theme == .keynoteGlow {
+            let glass = NSVisualEffectView()
+            glass.material = .hudWindow
+            glass.blendingMode = .behindWindow
+            glass.state = .active
+            box = glass
+        } else {
+            box = NSView()
+        }
         box.wantsLayer = true
-        box.layer?.backgroundColor = NSColor(white: 0.08, alpha: 0.82).cgColor
-        box.layer?.cornerRadius = 12
+        box.layer?.backgroundColor = settings.theme == .keynoteGlow ? nil : style.keycapBackground.nsColor.cgColor
+        box.layer?.cornerRadius = style.keycapCornerRadius
+        box.layer?.masksToBounds = settings.theme == .keynoteGlow
         box.layer?.borderWidth = dashed ? 2 : 1
-        box.layer?.borderColor = NSColor(white: 1, alpha: dashed ? 0.8 : 0.18).cgColor
+        box.layer?.borderColor = dashed ? NSColor(white: 1, alpha: 0.8).cgColor : style.keycapBorder.nsColor.cgColor
+        if settings.theme == .firefly {
+            let light = CALayer()
+            light.backgroundColor = RGBA(hex: FireflyPalette.light).cg()
+            light.frame = CGRect(x: 6, y: 6, width: 6, height: 6)
+            light.cornerRadius = 3
+            light.shadowColor = RGBA(hex: FireflyPalette.lightGlow).cg()
+            light.shadowOpacity = 1
+            light.shadowRadius = 3
+            light.shadowOffset = .zero
+            box.layer?.addSublayer(light)
+        }
+        if settings.theme == .brushInk {
+            let seal = CALayer()
+            seal.backgroundColor = RGBA(hex: 0xB8312F, alpha: 0.9).cg()
+            seal.frame = CGRect(x: 4, y: 4, width: 7, height: 7)
+            seal.cornerRadius = 1
+            box.layer?.addSublayer(seal)
+        }
         box.addSubview(label)
         label.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
