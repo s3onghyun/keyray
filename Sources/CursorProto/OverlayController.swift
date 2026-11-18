@@ -41,6 +41,12 @@ final class OverlayController {
             guard laserOn != oldValue else { return }
             trail.clear()
             laserRibbon.path = nil
+            if settings.theme == .firefly, let p = lastCursor {
+                CATransaction.begin()
+                CATransaction.setDisableActions(true)
+                placeCompanion(cursor: p)
+                CATransaction.commit()
+            }
             updateCursorLayers(animated: true)
         }
     }
@@ -82,6 +88,7 @@ final class OverlayController {
         trail.duration = s.laserTrailSeconds * s.style.laserTrailScale
         trail.maxWidth = s.laserWidth * (s.theme == .keynoteGlow ? 1.8 : 1)
         Skin.buildRing(into: ring, settings: s)
+        arcFacingLeft = false
         Skin.styleLaser(tip: laserDot, ribbon: laserRibbon, settings: s)
         companionKey = ""
         refreshCompanion()
@@ -222,13 +229,35 @@ final class OverlayController {
         CATransaction.setDisableActions(true)
         ring.position = p
         laserDot.position = p
-        if settings.theme == .firefly {
-            // Hovers just below and behind the cursor, on the side it came from, facing it.
-            let side: CGFloat = companionAnim.facingLeft ? 28 : -28
-            companion.position = CGPoint(x: p.x + side, y: p.y - 26)
-        }
+        if settings.theme == .firefly { placeCompanion(cursor: p) }
         CATransaction.commit()
         refreshCompanion()
+    }
+
+    /// The firefly leads the cursor with its tail lantern on the ring's rim, so the ring reads as
+    /// the lantern's light; with the laser on, the lantern sits on the laser point itself.
+    /// Call inside a transaction with actions disabled.
+    private func placeCompanion(cursor p: CGPoint) {
+        let left = companionAnim.facingLeft
+        var target = p
+        if !laserOn {
+            let a = Skin.lanternAngle(facingLeft: left), r = settings.ringDiameter / 2
+            target = CGPoint(x: p.x + cos(a) * r, y: p.y + sin(a) * r)
+        }
+        let off = Skin.lanternOffset(facingLeft: left)
+        companion.position = CGPoint(x: target.x - off.x, y: target.y - off.y)
+        if left != arcFacingLeft, let arc = ring.sublayers?.first(where: { $0.name == "lanternArc" }) {
+            arcFacingLeft = left
+            arc.transform = CATransform3DMakeRotation(Skin.lanternAngle(facingLeft: left), 0, 0, 1)
+        }
+    }
+
+    private var arcFacingLeft = false
+
+    /// The lantern's position in the cursor window's coordinates.
+    private var lanternPoint: CGPoint {
+        let off = Skin.lanternOffset(facingLeft: companionAnim.facingLeft)
+        return CGPoint(x: companion.position.x + off.x, y: companion.position.y + off.y)
     }
 
     private func pressed(_ button: MouseButton, at global: NSPoint) {
@@ -238,7 +267,8 @@ final class OverlayController {
             autoReleaseTimer?.invalidate()
             beginStroke(at: global)
         } else if settings.ripplesEnabled, let w = window(containing: global) {
-            Skin.addClickEffect(to: w.root, at: w.local(global), button: button, settings: settings)
+            let lantern = settings.theme == .firefly && w === cursorWindow ? lanternPoint : nil
+            Skin.addClickEffect(to: w.root, at: w.local(global), button: button, settings: settings, lantern: lantern)
         }
         if settings.theme == .firefly && !inkArmed {
             companionAnim.clicked(button, time: CACurrentMediaTime())
@@ -489,6 +519,11 @@ final class InkStroke {
             layer.shadowColor = style.pen.cg()
             layer.shadowOpacity = tool == .highlighter ? 0 : 0.6
             layer.shadowRadius = 4
+            layer.shadowOffset = .zero
+        case .cyberpunk: // a thin dark edge keeps neon readable on white slides
+            layer.shadowColor = RGBA(hex: CyberPalette.night).cg()
+            layer.shadowOpacity = tool == .highlighter ? 0 : 0.85
+            layer.shadowRadius = 1.2
             layer.shadowOffset = .zero
         case .firefly: // a faint warm glow along the stroke
             layer.shadowColor = RGBA(hex: FireflyPalette.lightGlow).cg()

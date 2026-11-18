@@ -2,13 +2,24 @@
 /// as configured. The Minimal theme takes its colors from the user's settings.
 public enum Theme: String, Codable, CaseIterable, Sendable {
     case minimal
-    /// A firefly companion that reacts to clicks and carries the laser's light; a ring of small
-    /// lights; warm glow trail; night-teal plaques. "Firefly" is a working name.
+    /// A firefly companion whose tail lantern is the light source: it lights the ring, pulses on a
+    /// click and becomes the laser point. Night-teal plaques. "Firefly" is a working name.
     case firefly
     /// Ink ensō ring, seal-stamp clicks, bleeding ink-brush laser, hanji-paper tags.
+    /// Parked after the concept round (black ink on white slides is hard to see): the code stays,
+    /// but it is not offered in the menu or Settings.
     case brushInk
     /// Soft light: glass ring, droplet ripples, glow laser, frosted keycaps.
+    /// Parked after the concept round (not distinctive enough); kept in code, not offered.
     case keynoteGlow
+    /// Dark-mode developer HUD: neon reticle, target-lock brackets on click, neon beam laser,
+    /// terminal keycaps. Reads on dark editor slides and on light slides.
+    case cyberpunk
+
+    /// Themes offered in the menu and Settings.
+    public static let offered: [Theme] = allCases.filter { !$0.isParked }
+
+    public var isParked: Bool { self == .brushInk || self == .keynoteGlow }
 
     public var title: String {
         switch self {
@@ -16,6 +27,7 @@ public enum Theme: String, Codable, CaseIterable, Sendable {
         case .firefly: "Firefly"
         case .brushInk: "Brush & Ink"
         case .keynoteGlow: "Keynote Glow"
+        case .cyberpunk: "Cyberpunk"
         }
     }
 }
@@ -29,7 +41,20 @@ public enum FireflyPalette {
     public static let eye: UInt32 = 0x1B1F24
     public static let light: UInt32 = 0xFFE27A
     public static let lightGlow: UInt32 = 0xFFC93C
+    /// The lit lantern: a near-white core fading to warm yellow-green at the rim.
+    public static let lanternCore: UInt32 = 0xFFFBD2
+    public static let lanternRim: UInt32 = 0xF2E15A
+    /// The lantern unlit (dozing).
+    public static let lanternOff: UInt32 = 0xD9D3A6
     public static let wing: UInt32 = 0xDCEFF5
+}
+
+/// Fixed colors of the Cyberpunk theme (0xRRGGBB).
+public enum CyberPalette {
+    public static let night: UInt32 = 0x0B0F1A
+    public static let cyan: UInt32 = 0x00E5FF
+    public static let magenta: UInt32 = 0xFF2BD6
+    public static let acid: UInt32 = 0xB6FF00
 }
 
 /// Every color and style switch a theme decides, as plain values.
@@ -99,6 +124,14 @@ extension AppSettings {
                        pen: RGBA(hex: 0x2E6BFF), highlighter: RGBA(hex: 0x7FE3FF, alpha: 0.32),
                        keycapBackground: RGBA(hex: 0x1C2033, alpha: 0.55), keycapBorder: RGBA(1, 1, 1, 0.35),
                        keycapText: RGBA(1, 1, 1), keycapCornerRadius: 14)
+        case .cyberpunk:
+            // Neon on night. The dark outline keeps the neon readable on white slides.
+            ThemeStyle(ring: RGBA(hex: CyberPalette.cyan), ringOutline: RGBA(hex: CyberPalette.night, alpha: 0.6),
+                       rippleLeft: RGBA(hex: CyberPalette.cyan), rippleRight: RGBA(hex: CyberPalette.magenta), rippleMiddle: RGBA(hex: CyberPalette.acid),
+                       laser: RGBA(hex: CyberPalette.magenta), laserTrailScale: 1.1,
+                       pen: RGBA(hex: CyberPalette.magenta), highlighter: RGBA(hex: CyberPalette.acid, alpha: 0.38),
+                       keycapBackground: RGBA(hex: CyberPalette.night, alpha: 0.92), keycapBorder: RGBA(hex: CyberPalette.cyan, alpha: 0.9),
+                       keycapText: RGBA(hex: CyberPalette.cyan), keycapCornerRadius: 3)
         }
     }
 }

@@ -165,6 +165,8 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
         switch settings.theme {
         case .firefly:
             label.font = .systemFont(ofSize: 30, weight: .bold)
+        case .cyberpunk:
+            label.font = .monospacedSystemFont(ofSize: 28, weight: .semibold)
         case .brushInk:
             label.font = NSFont(name: "AppleMyungjo", size: 30) ?? .systemFont(ofSize: 30)
         case .minimal, .keynoteGlow:
@@ -186,6 +188,23 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
         box.layer?.masksToBounds = settings.theme == .keynoteGlow
         box.layer?.borderWidth = dashed ? 2 : 1
         box.layer?.borderColor = dashed ? NSColor(white: 1, alpha: 0.8).cgColor : style.keycapBorder.nsColor.cgColor
+        if settings.theme == .cyberpunk {
+            // Terminal accents: a magenta prompt mark and faint scanlines.
+            let prompt = CALayer()
+            prompt.backgroundColor = RGBA(hex: CyberPalette.magenta).cg()
+            prompt.frame = CGRect(x: 5, y: 7, width: 3, height: 12)
+            box.layer?.addSublayer(prompt)
+            let lines = CAReplicatorLayer()
+            lines.frame = CGRect(x: 0, y: 0, width: 400, height: 60)
+            lines.instanceCount = 20
+            lines.instanceTransform = CATransform3DMakeTranslation(0, 3, 0)
+            let line = CALayer()
+            line.backgroundColor = RGBA(hex: CyberPalette.cyan, alpha: 0.07).cg()
+            line.frame = CGRect(x: 0, y: 0, width: 400, height: 1)
+            lines.addSublayer(line)
+            box.layer?.addSublayer(lines)
+            box.layer?.masksToBounds = true
+        }
         if settings.theme == .firefly {
             let light = CALayer()
             light.backgroundColor = RGBA(hex: FireflyPalette.light).cg()

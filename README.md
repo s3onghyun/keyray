@@ -30,9 +30,13 @@ Menu › Theme (or Settings) switches the look of every overlay; behavior and ti
 | Theme | Ring | Click | Laser | Keycaps |
 |---|---|---|---|---|
 | Minimal (default) | colored ring | ripple, color per button | dot and tapered trail | dark glass |
-| Firefly (working name) | circle of small lights, plus a firefly companion that reacts to clicks, holds its light while the laser is on and dozes when idle | glowing dots | warm light | night-teal plaques |
-| Brush & Ink | ink ensō | seal stamp: square, round, oval per button | bleeding brush trail | hanji tags |
-| Keynote Glow | simulated glass ring | droplet ripples | radial glow | system frosted glass |
+| Firefly (working name) | an arc of light from the firefly's tail lantern, brightest where the lantern touches it | the lantern pulses, beams to the click, a ring of light spreads | the lantern is the laser point and leaves the trail | night-teal plaques |
+| Cyberpunk | neon reticle | target-lock brackets labeled LMB, RMB, MMB | neon beam | terminal keycaps with scanlines |
+
+The firefly companion leads the cursor, beams on a left click, tilts its head on right and middle
+clicks, holds full light with the laser, and dozes when the cursor is still. Two earlier concepts,
+Brush & Ink and Keynote Glow, are parked: their code stays (`Theme.isParked`), but they are not
+offered in the menu or Settings.
 
 The theme sets its own colors; the color pickers apply to Minimal. The companion is drawn with
 Core Graphics, and its poses come from an event-driven animator in `CursorProtoCore`, so a still
