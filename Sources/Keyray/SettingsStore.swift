@@ -1,4 +1,4 @@
-import CursorProtoCore
+import KeyrayCore
 import Foundation
 
 /// The live settings, persisted as one JSON blob in the app's (sandboxed) user defaults.

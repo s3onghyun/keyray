@@ -1,5 +1,5 @@
 import AppKit
-import CursorProtoCore
+import KeyrayCore
 
 /// Listen-only keyboard event tap. A sandboxed app may do this with the Input Monitoring
 /// privilege (not Accessibility). The tap can only observe; it never changes or swallows events,

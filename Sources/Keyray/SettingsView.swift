@@ -1,4 +1,4 @@
-import CursorProtoCore
+import KeyrayCore
 import SwiftUI
 
 struct SettingsView: View {

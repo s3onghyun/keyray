@@ -1,5 +1,5 @@
 import Carbon.HIToolbox
-import CursorProtoCore
+import KeyrayCore
 
 /// Global shortcuts through Carbon's RegisterEventHotKey. Unlike a key event tap or a global
 /// key monitor, this needs no Accessibility or Input Monitoring permission and works in the sandbox.

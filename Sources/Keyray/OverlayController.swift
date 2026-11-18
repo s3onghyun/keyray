@@ -1,5 +1,5 @@
 import AppKit
-import CursorProtoCore
+import KeyrayCore
 
 /// Draws the cursor ring, click ripples, laser trail and ink on one overlay window per display.
 /// Everything is Core Animation layers, so moving the cursor only moves a layer and ripples
