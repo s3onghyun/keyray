@@ -64,7 +64,7 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
     func record(_ stroke: KeyStroke, isRepeat: Bool) {
         // Shortcut Subtitles: the name comes from the dictionary of the app the key went to.
         let app = previewApp ?? NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-        let subtitle = settings.keycapSubtitles ? ShortcutSubtitles.subtitle(for: stroke, bundleID: app) : nil
+        let subtitle = settings.keycapSubtitles ? ShortcutSubtitles.subtitle(for: stroke, bundleID: app, imported: settings.vscodeKeybindings) : nil
         guard !suppressed, feed.record(stroke, time: CACurrentMediaTime(), isRepeat: isRepeat, subtitle: subtitle) else { return }
         render()
         clearTimer?.invalidate()
@@ -92,7 +92,7 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
         previewApp = app
         var steps: [(Double, KeyStroke)] = []
         var t = 0.0
-        for stroke in ShortcutSubtitles.previewStrokes(bundleID: app) {
+        for stroke in ShortcutSubtitles.previewStrokes(bundleID: app, imported: settings.vscodeKeybindings) {
             if let last = steps.last?.1, last.matches(stroke) { t += 0.35 } else if !steps.isEmpty { t += 1.1 }
             steps.append((t, stroke))
         }

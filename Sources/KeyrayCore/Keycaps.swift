@@ -1,6 +1,6 @@
 import Foundation
 
-public struct KeyModifiers: OptionSet, Hashable, Sendable {
+public struct KeyModifiers: OptionSet, Hashable, Codable, Sendable {
     public let rawValue: Int
     public init(rawValue: Int) { self.rawValue = rawValue }
 
@@ -26,7 +26,7 @@ public struct KeyModifiers: OptionSet, Hashable, Sendable {
 }
 
 /// One key press as seen by the event tap: a virtual key code (ANSI layout) plus modifiers.
-public struct KeyStroke: Hashable, Sendable {
+public struct KeyStroke: Hashable, Codable, Sendable {
     public var keyCode: Int
     public var modifiers: KeyModifiers
 
