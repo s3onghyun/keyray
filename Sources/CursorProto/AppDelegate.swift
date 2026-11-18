@@ -165,7 +165,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let had = hideReasons.contains(.systemUI)
         if system { hideReasons.insert(.systemUI) } else { hideReasons.remove(.systemUI) }
         if had != system {
-            Log.app.notice("system UI frontmost (\(bundleID, privacy: .public)): overlays \(system ? "hidden" : "restored", privacy: .public)")
+            Log.app.notice("frontmost \(bundleID, privacy: .public): overlays \(system ? "hidden for system UI" : "restored", privacy: .public)")
             updateVisibility()
         }
     }
