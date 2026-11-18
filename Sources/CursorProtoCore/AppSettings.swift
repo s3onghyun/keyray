@@ -66,7 +66,7 @@ public enum InkInput: String, Codable, CaseIterable, Sendable {
 
 /// Every user-adjustable value. Unknown or missing keys decode to defaults, and `normalized`
 /// clamps out-of-range numbers, so an old or hand-edited preference can never break the app.
-public struct Settings: Codable, Equatable, Sendable {
+public struct AppSettings: Codable, Equatable, Sendable {
     public var enabled = true
 
     public var ringMode = RingMode.always
@@ -84,7 +84,8 @@ public struct Settings: Codable, Equatable, Sendable {
     public var rippleDuration = 0.45
     public var rippleDiameter = 70.0
 
-    public var keycapMode = KeycapMode.shortcutsOnly
+    /// Off until the user turns keycaps on, because they need Input Monitoring.
+    public var keycapMode = KeycapMode.off
     /// Keycap HUD center as a fraction of the screen's visible frame (0,0 = bottom left).
     public var keycapPosition = UnitPoint(x: 0.5, y: 0.12)
     public var keycapShowRepeatCount = true
@@ -106,11 +107,11 @@ public struct Settings: Codable, Equatable, Sendable {
 
     public init() {}
 
-    public static let `default` = Settings()
+    public static let `default` = AppSettings()
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        let d = Settings()
+        let d = AppSettings()
         func v<T: Decodable>(_ key: CodingKeys, _ fallback: T) -> T {
             (try? c.decodeIfPresent(T.self, forKey: key)) ?? fallback
         }
@@ -157,7 +158,7 @@ public struct Settings: Codable, Equatable, Sendable {
     public static let inkAutoReleaseRange = 0.5...30.0
 
     /// A copy with every number pulled into its allowed range.
-    public var normalized: Settings {
+    public var normalized: AppSettings {
         var s = self
         s.ringDiameter = ringDiameter.clamped(to: Self.ringDiameterRange)
         s.ringLineWidth = ringLineWidth.clamped(to: Self.ringLineWidthRange)
@@ -197,8 +198,8 @@ public struct Settings: Codable, Equatable, Sendable {
     }
 
     /// Defaults when the data is missing or unreadable.
-    public static func decoded(from data: Data?) -> Settings {
-        guard let data, let s = try? JSONDecoder().decode(Settings.self, from: data) else { return .default }
+    public static func decoded(from data: Data?) -> AppSettings {
+        guard let data, let s = try? JSONDecoder().decode(AppSettings.self, from: data) else { return .default }
         return s.normalized
     }
 }
