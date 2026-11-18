@@ -89,6 +89,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 MainActor.assumeIsolated { self?.keycaps.preview(bundleID: app) }
             }
         }
+        // Setup: `--ask-input-monitoring` turns keycaps on (shortcuts only unless already set) and
+        // does what the onboarding window's "Ask macOS" button does.
+        if args.contains("--ask-input-monitoring") && !KeyTap.hasPermission {
+            if settings.keycapMode == .off { store.settings.keycapMode = .shortcutsOnly }
+            Log.app.notice("asking for Input Monitoring (launch argument)")
+            showOnboarding()
+            requestInputMonitoring()
+        }
     }
 
     // MARK: Input
@@ -284,6 +292,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem.menu = menu
         refreshStatusIcon()
         rebuildMenu()
+        // A full menu bar hides the items that don't fit; log where ours landed and whether it is
+        // on screen, now and whenever that changes.
+        Timer.scheduledTimer(withTimeInterval: 1, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.logStatusItemPlacement() }
+        }
+        if let window = statusItem.button?.window {
+            NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification,
+                                                   object: window, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.logStatusItemPlacement() }
+            }
+        }
+    }
+
+    private func logStatusItemPlacement() {
+        let window = statusItem.button?.window
+        let frame = window.map { NSStringFromRect($0.frame) } ?? "none"
+        let screen = window?.screen.map { NSStringFromRect($0.frame) } ?? "none"
+        let onScreen = window?.occlusionState.contains(.visible) ?? false
+        Log.app.notice("status item: visible=\(self.statusItem.isVisible) onScreen=\(onScreen) frame=\(frame, privacy: .public) screen=\(screen, privacy: .public)")
     }
 
     private func refreshStatusIcon() {
