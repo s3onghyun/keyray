@@ -1,5 +1,5 @@
 import AppKit
-import CursorProtoCore
+import KeyrayCore
 
 extension RGBA {
     func cg(alpha: Double? = nil) -> CGColor {

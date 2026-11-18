@@ -2,13 +2,13 @@
 import PackageDescription
 
 let package = Package(
-    name: "CursorProto",
+    name: "Keyray",
     platforms: [.macOS(.v14)],
-    products: [.executable(name: "CursorProto", targets: ["CursorProto"])],
+    products: [.executable(name: "Keyray", targets: ["Keyray"])],
     targets: [
         // Pure logic (settings, timing, keycap formatting, geometry) with no AppKit, so it is unit-testable.
-        .target(name: "CursorProtoCore"),
-        .executableTarget(name: "CursorProto", dependencies: ["CursorProtoCore"]),
-        .testTarget(name: "CursorProtoCoreTests", dependencies: ["CursorProtoCore"]),
+        .target(name: "KeyrayCore"),
+        .executableTarget(name: "Keyray", dependencies: ["KeyrayCore"]),
+        .testTarget(name: "KeyrayCoreTests", dependencies: ["KeyrayCore"]),
     ]
 )

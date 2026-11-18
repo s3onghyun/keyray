@@ -1,5 +1,5 @@
 import AppKit
-import CursorProtoCore
+import KeyrayCore
 
 /// The on-screen keycaps: a row of rounded caps at a user-chosen spot on the display with the cursor.
 /// Click-through, except while "Move keycaps" is on, when it can be dragged to a new position.

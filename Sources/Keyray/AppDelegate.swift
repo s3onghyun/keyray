@@ -1,6 +1,6 @@
 import AppKit
 import Combine
-import CursorProtoCore
+import KeyrayCore
 import SwiftUI
 
 @MainActor
@@ -322,7 +322,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             statusItem?.button?.image = Skin.menuBarImage(theme: settings.theme)
             return
         }
-        statusItem?.button?.image = NSImage(systemSymbolName: name, accessibilityDescription: "Cursor highlighter")
+        statusItem?.button?.image = NSImage(systemSymbolName: name, accessibilityDescription: "Keyray")
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) { rebuildMenu() }
@@ -389,7 +389,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(item("Screen sharing tips…") { $0.showSharingTips() })
         menu.addItem(item("Settings…", key: ",") { $0.showSettings() })
         menu.addItem(.separator())
-        menu.addItem(item("Quit", key: "q") { _ in NSApp.terminate(nil) })
+        menu.addItem(item("Quit Keyray", key: "q") { _ in NSApp.terminate(nil) })
     }
 
     private func header(_ title: String) -> NSMenuItem {

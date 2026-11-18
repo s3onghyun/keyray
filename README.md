@@ -1,8 +1,8 @@
-# cursor-proto
+# Keyray (키레이)
 
-Codename for a one-week prototype of a presentation cursor highlighter for macOS: a menu-bar app
-that makes the cursor, clicks and shortcuts easy to see while presenting, teaching or recording.
-There is no product name yet; the bundle id `com.s3onghyun.cursor-proto` is a placeholder.
+A presentation cursor highlighter for macOS: a menu-bar app that makes the cursor, clicks and
+shortcuts easy to see while presenting, teaching or recording. Its mascot is Hotaru. The bundle id
+is `com.s3onghyun.keyray`; the project was developed under the codename cursor-proto.
 
 It is a native Swift app built for the Mac App Store's rules from day one: App Sandbox on,
 Hardened Runtime on, no Accessibility and no Screen Recording permission.
@@ -46,7 +46,7 @@ stays (`Theme.isParked`), but they are not offered in the menu or Settings.
 
 Keycaps also say what a shortcut does in the frontmost app: ⇧⌘P in VS Code shows "Command
 Palette", ⌃R in Terminal shows "Search History". The names come from bundled dictionaries of each
-app's documented default key bindings (`ShortcutSubtitles` in `CursorProtoCore`).
+app's documented default key bindings (`ShortcutSubtitles` in `KeyrayCore`).
 
 - **Apps covered:** VS Code, Xcode, Terminal, iTerm2, Chrome, Safari, Finder, Keynote, PowerPoint
   and Figma, plus a few universal macOS shortcuts such as Copy and Undo.
@@ -62,13 +62,13 @@ For demos without Input Monitoring:
 - **Launch argument:**
 
   ```sh
-  open -g build/CursorProto.app --args --preview-keycaps com.microsoft.VSCode 2
+  open -g build/Keyray.app --args --preview-keycaps com.microsoft.VSCode 2
   ```
 
   This plays the sample for that app after 2 s.
 
 The theme sets its own colors; the color pickers apply to Minimal. The companion is drawn with
-Core Graphics, and its poses come from an event-driven animator in `CursorProtoCore`, so a still
+Core Graphics, and its poses come from an event-driven animator in `KeyrayCore`, so a still
 cursor needs no timer.
 
 ### Shortcuts
@@ -106,23 +106,23 @@ use the 26.5 SDK and the native build system:
 
 ```sh
 export SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk
-SWIFT_BUILD_FLAGS="--build-system native" scripts/bundle.sh   # -> build/CursorProto.app
-open build/CursorProto.app
+SWIFT_BUILD_FLAGS="--build-system native" scripts/bundle.sh   # -> build/Keyray.app
+open build/Keyray.app
 ```
 
 `scripts/bundle.sh` builds the release binary, writes `Info.plist` (`LSUIElement`, so there is no
-Dock icon), and signs ad hoc with `--options runtime` and `Resources/CursorProto.entitlements`,
+Dock icon), and signs ad hoc with `--options runtime` and `Resources/Keyray.entitlements`,
 which contains only `com.apple.security.app-sandbox`. Check the result with:
 
 ```sh
-codesign -dvv --entitlements - build/CursorProto.app   # flags=0x10002(adhoc,runtime), app-sandbox
+codesign -dvv --entitlements - build/Keyray.app   # flags=0x10002(adhoc,runtime), app-sandbox
 ```
 
 ## Tests
 
 The pure logic (settings decoding and clamping, ripple, ink and idle timing, the laser trail,
 arrowheads, keycap labels, repeat counting, typing runs and hidden shortcuts) lives in
-`CursorProtoCore` and is covered by Swift Testing:
+`KeyrayCore` and is covered by Swift Testing:
 
 ```sh
 F=/Library/Developer/CommandLineTools/Library/Developer/Frameworks
@@ -149,7 +149,7 @@ sample keycaps without any permission, for checking the look and position.
 ## Logs
 
 ```sh
-/usr/bin/log show --last 10m --predicate 'subsystem == "com.s3onghyun.cursor-proto"'
+/usr/bin/log show --last 10m --predicate 'subsystem == "com.s3onghyun.keyray"'
 ```
 
 The launch line reports `sandboxed=true` when the App Sandbox is active.

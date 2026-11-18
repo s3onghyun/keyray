@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import CursorProtoCore
+@testable import KeyrayCore
 
 /// `#expect` cannot call a mutating method directly; this runs one and returns its result.
 func mutate<T, R>(_ value: inout T, _ body: (inout T) -> R) -> R { body(&value) }

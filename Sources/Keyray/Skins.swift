@@ -1,5 +1,5 @@
 import AppKit
-import CursorProtoCore
+import KeyrayCore
 
 /// How each theme draws the ring, click effect, laser tip and companion. All of it is built once
 /// per settings change; per-move work stays a layer position update.
@@ -651,10 +651,10 @@ enum Skin {
 
     static func menuBarImage(theme: Theme) -> NSImage? {
         switch theme {
-        case .minimal: return NSImage(systemSymbolName: "cursorarrow.rays", accessibilityDescription: "Cursor highlighter")
-        case .brushInk: return NSImage(systemSymbolName: "paintbrush.pointed", accessibilityDescription: "Cursor highlighter")
-        case .cyberpunk: return NSImage(systemSymbolName: "scope", accessibilityDescription: "Cursor highlighter")
-        case .keynoteGlow: return NSImage(systemSymbolName: "sparkles", accessibilityDescription: "Cursor highlighter")
+        case .minimal: return NSImage(systemSymbolName: "cursorarrow.rays", accessibilityDescription: "Keyray")
+        case .brushInk: return NSImage(systemSymbolName: "paintbrush.pointed", accessibilityDescription: "Keyray")
+        case .cyberpunk: return NSImage(systemSymbolName: "scope", accessibilityDescription: "Keyray")
+        case .keynoteGlow: return NSImage(systemSymbolName: "sparkles", accessibilityDescription: "Keyray")
         case .hotaru:
             return hotaruTemplateIcon()
         }
@@ -693,7 +693,7 @@ enum Skin {
             return true
         }
         image.isTemplate = true
-        image.accessibilityDescription = "Cursor highlighter"
+        image.accessibilityDescription = "Keyray"
         return image
     }
 
