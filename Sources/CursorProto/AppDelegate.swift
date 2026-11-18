@@ -34,6 +34,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         let sandboxed = ProcessInfo.processInfo.environment["APP_SANDBOX_CONTAINER_ID"] != nil
         Log.app.notice("launch: sandboxed=\(sandboxed) bundle=\(Bundle.main.bundleIdentifier ?? "-", privacy: .public) pid=\(ProcessInfo.processInfo.processIdentifier)")
+        // Inside the App Sandbox the home directory is the app's container.
+        Log.app.notice("home: \(NSHomeDirectory().replacingOccurrences(of: "/Users/\(NSUserName())", with: "~"), privacy: .public)")
 
         overlay = OverlayController(settings: settings)
         overlay.onInkAutoRelease = { [weak self] in self?.setInk(false) }
