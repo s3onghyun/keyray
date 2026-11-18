@@ -192,43 +192,43 @@ let cmd: KeyModifiers = [.command]
     #expect(feed.entries.isEmpty)
 }
 
-// MARK: - Settings
+// MARK: - AppSettings
 
 @Test func settingsRoundTrip() throws {
-    var s = Settings()
+    var s = AppSettings()
     s.ringDiameter = 60
     s.ringMode = .clickOnly
     s.keycapMode = .allKeys
     s.inkTool = .highlighter
     s.rippleRight = RGBA(0.1, 0.2, 0.3, 0.4)
-    let back = Settings.decoded(from: try s.encoded())
+    let back = AppSettings.decoded(from: try s.encoded())
     #expect(back == s)
 }
 
 @Test func settingsFallBackToDefaults() {
-    #expect(Settings.decoded(from: nil) == .default)
-    #expect(Settings.decoded(from: Data("not json".utf8)) == .default)
+    #expect(AppSettings.decoded(from: nil) == .default)
+    #expect(AppSettings.decoded(from: Data("not json".utf8)) == .default)
     // Missing keys and unknown enum values keep their defaults; known keys survive.
     let partial = Data(#"{"ringDiameter": 90, "ringMode": "sparkles", "futureKey": 1}"#.utf8)
-    let s = Settings.decoded(from: partial)
+    let s = AppSettings.decoded(from: partial)
     #expect(s.ringDiameter == 90)
-    #expect(s.ringMode == Settings.default.ringMode)
-    #expect(s.keycapMode == Settings.default.keycapMode)
+    #expect(s.ringMode == AppSettings.default.ringMode)
+    #expect(s.keycapMode == AppSettings.default.keycapMode)
 }
 
 @Test func settingsClampOutOfRangeValues() {
     let data = Data(#"{"ringDiameter": 5000, "ringOpacity": -3, "idleHideSeconds": -1, "rippleDuration": 0, "keycapPosition": {"x": 2, "y": -1}, "inkColor": {"red": 2, "green": -1, "blue": 0.5, "alpha": 7}}"#.utf8)
-    let s = Settings.decoded(from: data)
-    #expect(s.ringDiameter == Settings.ringDiameterRange.upperBound)
+    let s = AppSettings.decoded(from: data)
+    #expect(s.ringDiameter == AppSettings.ringDiameterRange.upperBound)
     #expect(s.ringOpacity == 0.1)
     #expect(s.idleHideSeconds == 0)
-    #expect(s.rippleDuration == Settings.rippleDurationRange.lowerBound)
+    #expect(s.rippleDuration == AppSettings.rippleDurationRange.lowerBound)
     #expect(s.keycapPosition == UnitPoint(x: 1, y: 0))
     #expect(s.inkColor == RGBA(1, 0, 0.5, 1))
 }
 
 @Test func rippleColorsFollowTheButton() {
-    let s = Settings()
+    let s = AppSettings()
     #expect(s.rippleColor(for: .left) == s.rippleLeft)
     #expect(s.rippleColor(for: .right) == s.rippleRight)
     #expect(s.rippleColor(for: .middle) == s.rippleMiddle)
