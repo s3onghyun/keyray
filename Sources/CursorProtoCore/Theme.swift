@@ -2,9 +2,10 @@
 /// as configured. The Minimal theme takes its colors from the user's settings.
 public enum Theme: String, Codable, CaseIterable, Sendable {
     case minimal
-    /// A firefly companion whose tail lantern is the light source: it lights the ring, pulses on a
-    /// click and becomes the laser point. Night-teal plaques. "Firefly" is a working name.
-    case firefly
+    /// Hotaru, a hand-drawn firefly whose tail lantern is the only light: it lights the ring,
+    /// flashes on a click and becomes the laser point. Direction art from Claude Design,
+    /// implemented in code.
+    case hotaru
     /// Ink ensō ring, seal-stamp clicks, bleeding ink-brush laser, hanji-paper tags.
     /// Parked after the concept round (black ink on white slides is hard to see): the code stays,
     /// but it is not offered in the menu or Settings.
@@ -16,15 +17,15 @@ public enum Theme: String, Codable, CaseIterable, Sendable {
     /// terminal keycaps. Reads on dark editor slides and on light slides.
     case cyberpunk
 
-    /// Themes offered in the menu and Settings.
-    public static let offered: [Theme] = allCases.filter { !$0.isParked }
+    /// Themes offered in the menu and Settings, in menu order.
+    public static let offered: [Theme] = [.hotaru, .cyberpunk, .minimal]
 
     public var isParked: Bool { self == .brushInk || self == .keynoteGlow }
 
     public var title: String {
         switch self {
         case .minimal: "Minimal"
-        case .firefly: "Firefly"
+        case .hotaru: "Hotaru"
         case .brushInk: "Brush & Ink"
         case .keynoteGlow: "Keynote Glow"
         case .cyberpunk: "Cyberpunk"
@@ -32,21 +33,21 @@ public enum Theme: String, Codable, CaseIterable, Sendable {
     }
 }
 
-/// Fixed colors of the firefly companion (0xRRGGBB).
-public enum FireflyPalette {
-    public static let body: UInt32 = 0x24505F
-    public static let bodyShade: UInt32 = 0x1A3B47
-    public static let face: UInt32 = 0xFFF3D6
-    public static let cheek: UInt32 = 0xFF9E8A
-    public static let eye: UInt32 = 0x1B1F24
-    public static let light: UInt32 = 0xFFE27A
-    public static let lightGlow: UInt32 = 0xFFC93C
-    /// The lit lantern: a near-white core fading to warm yellow-green at the rim.
-    public static let lanternCore: UInt32 = 0xFFFBD2
-    public static let lanternRim: UInt32 = 0xF2E15A
-    /// The lantern unlit (dozing).
-    public static let lanternOff: UInt32 = 0xD9D3A6
-    public static let wing: UInt32 = 0xDCEFF5
+/// Hotaru's palette, from the character sheet (0xRRGGBB).
+public enum HotaruPalette {
+    public static let nightInk: UInt32 = 0x2B2620 // outlines
+    public static let body: UInt32 = 0x3A342C // abdomen
+    public static let head: UInt32 = 0x4A483C
+    public static let collar: UInt32 = 0xCF5F40 // ember pronotum, the identity mark
+    public static let wingRear: UInt32 = 0xE6ECDD
+    public static let wingFront: UInt32 = 0xF1F4EA
+    public static let eye: UInt32 = 0xFBF6EA
+    public static let blush: UInt32 = 0xE58C7A
+    public static let lanternCore: UInt32 = 0xFFF8D2
+    public static let lanternRim: UInt32 = 0xF2D04A
+    public static let lanternGlow: UInt32 = 0xFFC33C
+    public static let lanternDim: UInt32 = 0xD8D1A6
+    public static let trail: UInt32 = 0xFFB830
 }
 
 /// Fixed colors of the Cyberpunk theme (0xRRGGBB).
@@ -102,14 +103,15 @@ extension AppSettings {
                        pen: inkColor, highlighter: RGBA.highlighterYellow.withAlpha(0.4),
                        keycapBackground: RGBA(0.08, 0.08, 0.08, 0.82), keycapBorder: RGBA(1, 1, 1, 0.18),
                        keycapText: RGBA(1, 1, 1), keycapCornerRadius: 12)
-        case .firefly:
-            // Night teal (the firefly's body) and its warm tail light.
-            ThemeStyle(ring: RGBA(hex: 0xFFC93C), ringOutline: RGBA(hex: 0x1D3F4B, alpha: 0.6),
-                       rippleLeft: RGBA(hex: 0xFFC93C), rippleRight: RGBA(hex: 0x6CB8FF), rippleMiddle: RGBA(hex: 0x6FD69A),
-                       laser: RGBA(hex: 0xFFB830), laserTrailScale: 1.2,
-                       pen: RGBA(hex: 0x1E5F74), highlighter: RGBA(hex: 0xFFE27A, alpha: 0.5),
-                       keycapBackground: RGBA(hex: 0x1D3F4B, alpha: 0.94), keycapBorder: RGBA(hex: 0xFFC93C, alpha: 0.6),
-                       keycapText: RGBA(hex: 0xFFF3D6), keycapCornerRadius: 10)
+        case .hotaru:
+            // Everything is lit by the lantern: the ring is its rim color, the trail is amber,
+            // the pen takes the ember collar color so it reads on light and dark slides.
+            ThemeStyle(ring: RGBA(hex: HotaruPalette.lanternRim), ringOutline: RGBA(hex: HotaruPalette.nightInk, alpha: 0.3),
+                       rippleLeft: RGBA(hex: HotaruPalette.lanternGlow), rippleRight: RGBA(hex: 0x6CB8FF), rippleMiddle: RGBA(hex: 0x6FD69A),
+                       laser: RGBA(hex: HotaruPalette.trail), laserTrailScale: 1.2,
+                       pen: RGBA(hex: HotaruPalette.collar), highlighter: RGBA(hex: HotaruPalette.lanternGlow, alpha: 0.45),
+                       keycapBackground: RGBA(hex: HotaruPalette.nightInk, alpha: 0.94), keycapBorder: RGBA(hex: HotaruPalette.lanternRim, alpha: 0.6),
+                       keycapText: RGBA(hex: HotaruPalette.lanternCore), keycapCornerRadius: 10)
         case .brushInk:
             ThemeStyle(ring: RGBA(hex: 0x1F1A17, alpha: 0.88), ringOutline: RGBA(hex: 0xF2EAD8, alpha: 0.7),
                        rippleLeft: RGBA(hex: 0xB8312F), rippleRight: RGBA(hex: 0x2F4A7A), rippleMiddle: RGBA(hex: 0x3E6B4F),

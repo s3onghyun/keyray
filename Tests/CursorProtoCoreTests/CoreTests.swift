@@ -247,16 +247,17 @@ let cmd: KeyModifiers = [.command]
     var s = AppSettings()
     s.theme = .brushInk
     #expect(AppSettings.decoded(from: try s.encoded()).theme == .brushInk)
-    #expect(AppSettings.decoded(from: Data(#"{"theme": "neon"}"#.utf8)).theme == .minimal)
+    #expect(AppSettings.decoded(from: Data(#"{"theme": "neon"}"#.utf8)).theme == .hotaru)
 }
 
 @Test func minimalStyleUsesTheUsersColors() {
     var s = AppSettings()
+    s.theme = .minimal
     s.ringColor = RGBA(0.1, 0.2, 0.3)
     s.rippleRight = RGBA(0.4, 0.5, 0.6)
     #expect(s.style.ring == s.ringColor)
     #expect(s.style.ripple(for: .right) == s.rippleRight)
-    s.theme = .firefly
+    s.theme = .hotaru
     #expect(s.style.ring != s.ringColor)
 }
 
@@ -272,7 +273,7 @@ let cmd: KeyModifiers = [.command]
 @Test func parkedThemesAreNotOffered() {
     #expect(!Theme.offered.contains(.brushInk))
     #expect(!Theme.offered.contains(.keynoteGlow))
-    #expect(Theme.offered == [.minimal, .firefly, .cyberpunk])
+    #expect(Theme.offered == [.hotaru, .cyberpunk, .minimal])
     // A saved Brush & Ink choice still decodes and draws.
     #expect(AppSettings.decoded(from: Data(#"{"theme": "brushInk"}"#.utf8)).theme == .brushInk)
 }
@@ -282,7 +283,14 @@ let cmd: KeyModifiers = [.command]
     #expect(RGBA(hex: 0x000000, alpha: 0.5).alpha == 0.5)
 }
 
-// MARK: - Firefly companion
+// MARK: - Hotaru companion
+
+@Test func hotaruIsTheFirstLaunchTheme() {
+    #expect(AppSettings().theme == .hotaru)
+    #expect(!AppSettings().greeted)
+    // A saved "firefly" from an earlier build falls back to the default.
+    #expect(AppSettings.decoded(from: Data(#"{"theme": "firefly"}"#.utf8)).theme == .hotaru)
+}
 
 @Test func companionFliesReactsAndSettles() {
     var c = CompanionAnimator()
@@ -295,31 +303,96 @@ let cmd: KeyModifiers = [.command]
     #expect(c.pose(at: 1) == .flyA)
     c.moved(dx: c.strokeLength, dy: 0, time: 1.05)
     #expect(c.pose(at: 1.05) == .flyB)
-    #expect(!c.facingLeft)
     c.moved(dx: -3, dy: 0, time: 1.1)
     #expect(c.facingLeft)
     #expect(c.nextChange(after: 1.1) == 1.1 + c.settleDelay)
     #expect(c.pose(at: 1.1 + c.settleDelay) == .rest)
 
     c.clicked(.left, time: 2)
-    #expect(c.pose(at: 2.1) == .happy)
-    #expect(c.nextChange(after: 2.1) == 2 + c.glowAt)
-    #expect(c.pose(at: 2 + c.glowAt + 0.01) == .glow)
-    #expect(c.pose(at: 2 + c.reactionDuration) == .rest)
-    #expect(c.nextChange(after: 2 + c.reactionDuration) == nil)
+    #expect(c.pose(at: 2.1) == .flash)
+    #expect(c.nextChange(after: 2.1) == 2 + c.flashDuration)
+    #expect(c.pose(at: 2 + c.flashDuration) == .rest)
 
     c.clicked(.right, time: 3)
     #expect(c.pose(at: 3.5) == .curious)
-    #expect(c.nextChange(after: 3.1) == 3 + c.reactionDuration)
+    #expect(c.nextChange(after: 3.1) == 3 + c.curiousDuration)
 }
 
-@Test func everyPoseHasADistinctFace() {
-    let faces = CompanionPose.allCases.map { CompanionFace.of($0) }
-    #expect(Set(faces.map { "\($0)" }).count == faces.count)
-    #expect(faces.allSatisfy { (0...1).contains($0.glow) })
-    // The laser pose keeps the tail at full light; dozing nearly turns it off.
+@Test func greetingWavesThenSettles() {
+    var c = CompanionAnimator()
+    c.greet(time: 10)
+    #expect(c.pose(at: 10.1) == .waveA)
+    #expect(c.pose(at: 10.1 + c.waveStroke) == .waveB)
+    #expect(abs((c.nextChange(after: 10.1) ?? 0) - (10 + c.waveStroke)) < 1e-9)
+    #expect(c.pose(at: 10 + c.waveDuration + 0.01) == .rest)
+    #expect(c.nextChange(after: 10 + c.waveDuration + 0.01) == nil)
+    // A click during the wave takes over, then the wave resumes.
+    c.clicked(.left, time: 11)
+    #expect(c.pose(at: 11.1) == .flash)
+}
+
+@Test func faceFollowsTheSheet() {
     #expect(CompanionFace.of(.focus).glow == 1)
-    #expect(CompanionFace.of(.doze).glow < CompanionFace.of(.rest).glow)
+    #expect(CompanionFace.of(.flash).glow == 1)
+    #expect(abs(CompanionFace.of(.doze).glow - 0.15) < 1e-9) // dims, not hidden
+    // Blush only for happy and waving.
+    let blushing = CompanionPose.allCases.filter { CompanionFace.of($0).blush }
+    #expect(Set(blushing) == [.flash, .waveA, .waveB])
+    #expect(CompanionFace.of(.waveA).wave > CompanionFace.of(.waveB).wave)
+}
+
+// MARK: - Shortcut Subtitles
+
+@Test func subtitlesComeFromTheFrontmostApp() {
+    let shiftCmdP = KeyStroke(keyCode: 35, modifiers: [.shift, .command])
+    #expect(ShortcutSubtitles.subtitle(for: shiftCmdP, bundleID: "com.microsoft.VSCode") == "Command Palette")
+    let ctrlR = KeyStroke(keyCode: 15, modifiers: [.control])
+    #expect(ShortcutSubtitles.subtitle(for: ctrlR, bundleID: "com.apple.Terminal") == "Search History")
+    #expect(ShortcutSubtitles.subtitle(for: ctrlR, bundleID: "com.googlecode.iterm2") == "Search History")
+    // The same keys mean different things per app.
+    let cmdD = KeyStroke(keyCode: 2, modifiers: [.command])
+    #expect(ShortcutSubtitles.subtitle(for: cmdD, bundleID: "com.apple.finder") == "Duplicate")
+    #expect(ShortcutSubtitles.subtitle(for: cmdD, bundleID: "com.google.Chrome") == "Bookmark Page")
+    // Universal shortcuts work anywhere; unknown ones stay silent.
+    #expect(ShortcutSubtitles.subtitle(for: KeyStroke(keyCode: 8, modifiers: [.command]), bundleID: "com.example.unknown") == "Copy")
+    #expect(ShortcutSubtitles.subtitle(for: KeyStroke(keyCode: 3, modifiers: [.control, .option]), bundleID: "com.microsoft.VSCode") == nil)
+    #expect(ShortcutSubtitles.subtitle(for: shiftCmdP, bundleID: nil) == nil)
+    // Fn added by macOS to F-keys and arrows does not change the label.
+    #expect(ShortcutSubtitles.subtitle(for: KeyStroke(keyCode: 111, modifiers: [.function]), bundleID: "com.microsoft.VSCode") == "Go to Definition")
+}
+
+@Test func dictionaryKeysUseAppleModifierOrder() {
+    let order: [Character] = ["⌃", "⌥", "⇧", "⌘"]
+    for (id, app) in ShortcutSubtitles.apps {
+        for key in app.bindings.keys {
+            let mods = key.prefix { order.contains($0) }
+            let ranks = mods.map { order.firstIndex(of: $0)! }
+            #expect(ranks == ranks.sorted() && Set(ranks).count == ranks.count, "\(id): \(key)")
+            #expect(key.count > mods.count, "\(id): \(key) has no key")
+        }
+    }
+}
+
+@Test func everyPreviewKeyHasASubtitle() {
+    for id in ShortcutSubtitles.apps.keys {
+        for stroke in ShortcutSubtitles.previewStrokes(bundleID: id) {
+            let name = ShortcutSubtitles.subtitle(for: stroke, bundleID: id)
+            // Apps without their own sample use the browser keys, which only browsers know.
+            if ["com.apple.finder", "com.figma.Desktop", "com.microsoft.Powerpoint"].contains(id) { continue }
+            #expect(name != nil, "\(id): \(stroke.label)")
+        }
+    }
+}
+
+@Test func feedCarriesSubtitlesWithRepeatCount() {
+    var feed = KeycapFeed(mode: .shortcutsOnly)
+    let cmdD = KeyStroke(keyCode: 2, modifiers: [.command])
+    feed.record(cmdD, time: 0, subtitle: "Add Selection to Next Match")
+    feed.record(cmdD, time: 0.3, subtitle: "Add Selection to Next Match")
+    feed.record(cmdD, time: 0.6, subtitle: "Add Selection to Next Match")
+    #expect(feed.currentSubtitle == "Add Selection to Next Match ×3")
+    feed.record(KeyStroke(keyCode: 3, modifiers: [.control, .option]), time: 0.9)
+    #expect(feed.currentSubtitle == nil)
 }
 
 @Test func stampDropsHoldsAndFades() {

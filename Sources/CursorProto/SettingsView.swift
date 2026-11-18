@@ -55,6 +55,7 @@ struct SettingsView: View {
                     Text("Shortcuts only").tag(KeycapMode.shortcutsOnly)
                     Text("All keys").tag(KeycapMode.allKeys)
                 }
+                Toggle("Shortcut Subtitles (what the shortcut does in the frontmost app)", isOn: $store.settings.keycapSubtitles)
                 Toggle("Count repeats (⌘Z ×3)", isOn: $store.settings.keycapShowRepeatCount)
                 Toggle("Hide this app's own shortcuts", isOn: $store.settings.keycapHideActivationKeys)
                 slider("Stay on screen", $store.settings.keycapLingerSeconds, AppSettings.keycapLingerRange, "%.1f s")

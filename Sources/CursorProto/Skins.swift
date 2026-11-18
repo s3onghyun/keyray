@@ -5,20 +5,30 @@ import CursorProtoCore
 /// per settings change; per-move work stays a layer position update.
 @MainActor
 enum Skin {
-    /// The firefly companion's drawing box, in points.
+    /// Hotaru's drawing box, in points.
     static let companionSize: CGFloat = 48
-    /// Center of the firefly's tail lantern in its box (y up, facing right).
-    static let lanternInBox = CGPoint(x: 14, y: 15)
+    /// Hotaru's body axis: the drawing is rotated about this point by `bodyAngle + pitch`.
+    static let bodyCenter = CGPoint(x: 23, y: 20)
+    static let bodyAngle: CGFloat = 28
+    /// The lantern's center along the body axis, relative to `bodyCenter`.
+    static let lanternOnAxis: CGFloat = -12
 
-    /// The lantern's offset from the companion layer's center.
-    static func lanternOffset(facingLeft: Bool) -> CGPoint {
-        let x = lanternInBox.x - companionSize / 2
-        return CGPoint(x: facingLeft ? -x : x, y: lanternInBox.y - companionSize / 2)
+    /// Center of the tail lantern in the box (y up, facing right) for a pose.
+    static func lanternInBox(_ pose: CompanionPose = .rest) -> CGPoint {
+        let a = (bodyAngle + CGFloat(CompanionFace.of(pose).pitch)) * .pi / 180
+        return CGPoint(x: bodyCenter.x + cos(a) * lanternOnAxis, y: bodyCenter.y + sin(a) * lanternOnAxis)
     }
 
-    /// Where the lantern touches the ring: lower right while the firefly leads to the right,
-    /// lower left when it leads to the left.
-    static func lanternAngle(facingLeft: Bool) -> CGFloat { (facingLeft ? 210 : -30) * .pi / 180 }
+    /// The lantern's offset from the companion layer's center.
+    static func lanternOffset(facingLeft: Bool, pose: CompanionPose = .rest) -> CGPoint {
+        let l = lanternInBox(pose)
+        let x = l.x - companionSize / 2
+        return CGPoint(x: facingLeft ? -x : x, y: l.y - companionSize / 2)
+    }
+
+    /// Where the lantern touches the ring: upper right while moving right, upper left while
+    /// moving left, so the body sits beside the pointer and never over the click point.
+    static func lanternAngle(facingLeft: Bool) -> CGFloat { (facingLeft ? 135 : 45) * .pi / 180 }
 
     // MARK: Ring
 
@@ -36,41 +46,31 @@ enum Skin {
             ring.lineWidth = s.ringLineWidth
             container.addSublayer(ring)
 
-        case .firefly:
-            // Light from the tail lantern: the ring is brightest where the lantern touches it
-            // and fades around the circle. The arc layer is turned toward the lantern (see
-            // `lanternAngle`) by the overlay when the firefly changes sides.
-            let r = d / 2, pad: CGFloat = 8
-            let base = shape(circle)
-            base.fillColor = nil
-            base.strokeColor = style.ringOutline?.cg()
-            base.lineWidth = 1.5
-            let warm = shape(circle)
-            warm.fillColor = style.ring.cg(alpha: 0.07)
-            warm.strokeColor = style.ring.cg(alpha: 0.3)
-            warm.lineWidth = s.ringLineWidth
-            glow(warm, style.ring, radius: 5)
-            let arc = CAGradientLayer()
-            arc.name = "lanternArc"
-            arc.type = .conic
-            arc.startPoint = CGPoint(x: 0.5, y: 0.5)
-            arc.endPoint = CGPoint(x: 1, y: 0.5)
-            // Strongest (deep amber) at the lantern; a near-white peak would vanish on light slides.
-            let peak = style.laser.cg(), lit = style.ring.cg(alpha: 0.75), dim = style.ring.cg(alpha: 0.12)
-            arc.colors = [peak, lit, dim, dim, lit, peak]
-            arc.locations = [0, 0.14, 0.42, 0.58, 0.86, 1]
-            arc.frame = CGRect(x: -r - pad, y: -r - pad, width: 2 * (r + pad), height: 2 * (r + pad))
-            arc.actions = ["transform": NSNull(), "position": NSNull(), "bounds": NSNull()]
-            arc.transform = CATransform3DMakeRotation(lanternAngle(facingLeft: false), 0, 0, 1)
-            let mask = CAShapeLayer()
-            mask.path = CGPath(ellipseIn: CGRect(x: pad, y: pad, width: 2 * r, height: 2 * r), transform: nil)
-            mask.fillColor = nil
-            mask.strokeColor = NSColor.white.cgColor
-            mask.lineWidth = s.ringLineWidth + 2
-            arc.mask = mask
-            container.addSublayer(base)
-            container.addSublayer(warm)
-            container.addSublayer(arc)
+        case .hotaru:
+            // A pool of lantern light: a soft warm fill that brightens toward the rim, a lantern-rim
+            // edge with a glow, and a faint ink line outside it so it holds on light slides.
+            let r = d / 2
+            let outline = shape(CGPath(ellipseIn: CGRect(x: -r - 2, y: -r - 2, width: d + 4, height: d + 4), transform: nil))
+            outline.fillColor = nil
+            outline.strokeColor = style.ringOutline?.cg()
+            outline.lineWidth = 1
+            let pool = CAGradientLayer()
+            pool.type = .radial
+            pool.colors = [RGBA(hex: HotaruPalette.lanternGlow, alpha: 0.06).cg(), RGBA(hex: HotaruPalette.lanternGlow, alpha: 0.26).cg()]
+            pool.locations = [0.2, 1]
+            pool.startPoint = CGPoint(x: 0.5, y: 0.5)
+            pool.endPoint = CGPoint(x: 1, y: 1)
+            pool.frame = CGRect(x: -r, y: -r, width: d, height: d)
+            pool.cornerRadius = r
+            pool.masksToBounds = true
+            let rim = shape(circle)
+            rim.fillColor = nil
+            rim.strokeColor = style.ring.cg()
+            rim.lineWidth = s.ringLineWidth
+            glow(rim, RGBA(hex: HotaruPalette.lanternGlow), radius: 4)
+            container.addSublayer(outline)
+            container.addSublayer(pool)
+            container.addSublayer(rim)
 
         case .cyberpunk:
             // A HUD reticle: four arcs with gaps at the compass points, short ticks in the gaps,
@@ -159,7 +159,7 @@ enum Skin {
     // MARK: Click effects
 
     /// A one-shot click effect at `point`, already animating; it removes itself when done.
-    /// `lantern` is where the firefly's tail lantern is, for the Firefly theme.
+    /// `lantern` is where Hotaru's tail lantern is, for the Hotaru theme.
     static func addClickEffect(to root: CALayer, at point: CGPoint, button: MouseButton, settings s: AppSettings,
                                lantern: CGPoint? = nil) {
         let color = s.style.ripple(for: button)
@@ -172,14 +172,16 @@ enum Skin {
                 ripple(root: root, at: point, color: color, diameter: s.rippleDiameter * scale,
                        duration: s.rippleDuration * 1.3, width: 2.5 - Double(i) * 0.5, glow: true, delay: Double(i) * 0.09)
             }
-        case .firefly:
-            // The tail pulses, a short beam reaches the click, and a ring of light spreads from it.
+        case .hotaru:
+            // From the character sheet: the lantern flashes (the overlay animates Hotaru's halo),
+            // short rays leave it, a beam reaches the click, and a small ring marks the click in
+            // the button's color.
             if let lantern {
-                lanternPulse(root: root, at: lantern)
-                beam(root: root, from: lantern, to: point, color: s.style.ring)
+                if button == .left { rays(root: root, around: lantern) } // the flash is a left-click reaction
+                beam(root: root, from: lantern, to: point, color: RGBA(hex: HotaruPalette.lanternGlow))
             }
-            ripple(root: root, at: point, color: color, diameter: s.rippleDiameter, duration: s.rippleDuration,
-                   width: 2.5, glow: true, delay: lantern == nil ? 0 : 0.06)
+            ripple(root: root, at: point, color: color, diameter: s.rippleDiameter * 0.55, duration: s.rippleDuration,
+                   width: 2, glow: true, delay: lantern == nil ? 0 : 0.06)
         case .cyberpunk:
             targetLock(root: root, at: point, color: color, outline: s.style.ringOutline ?? RGBA(0, 0, 0), button: button)
         case .brushInk:
@@ -213,26 +215,27 @@ enum Skin {
         run(layer, in: root, animations: [scale, alpha], duration: timing.duration, delay: delay)
     }
 
-    /// The tail lantern flaring: a warm radial light that swells and fades.
-    private static func lanternPulse(root: CALayer, at point: CGPoint) {
-        let light = CAGradientLayer()
-        light.type = .radial
-        light.colors = [RGBA(hex: FireflyPalette.lanternCore).cg(), RGBA(hex: FireflyPalette.lightGlow, alpha: 0.75).cg(),
-                        RGBA(hex: FireflyPalette.lightGlow, alpha: 0).cg()]
-        light.locations = [0, 0.3, 1]
-        light.startPoint = CGPoint(x: 0.5, y: 0.5)
-        light.endPoint = CGPoint(x: 1, y: 1)
-        light.bounds = CGRect(x: 0, y: 0, width: 40, height: 40)
-        light.position = point
-        light.opacity = 0
-        let scale = CABasicAnimation(keyPath: "transform.scale")
-        scale.fromValue = 0.5
-        scale.toValue = 1.8
-        scale.timingFunction = CAMediaTimingFunction(name: .easeOut)
+    /// Short rays thrown off the lantern for one flash: out in about 120 ms, gone by 520 ms.
+    private static func rays(root: CALayer, around point: CGPoint) {
+        let path = CGMutablePath()
+        for i in 0..<7 {
+            let a = CGFloat(i) * 2 * .pi / 7 + 0.3
+            path.move(to: CGPoint(x: cos(a) * 11, y: sin(a) * 11))
+            path.addLine(to: CGPoint(x: cos(a) * 16, y: sin(a) * 16))
+        }
+        let layer = shape(path)
+        layer.strokeColor = RGBA(hex: HotaruPalette.lanternGlow).cg()
+        layer.lineWidth = 2
+        layer.lineCap = .round
+        layer.position = point
+        layer.opacity = 0
+        let scale = CAKeyframeAnimation(keyPath: "transform.scale")
+        scale.values = [0.6, 1.15, 1.3]
+        scale.keyTimes = [0, 0.23, 1]
         let alpha = CAKeyframeAnimation(keyPath: "opacity")
-        alpha.values = [0, 1, 0.8, 0]
-        alpha.keyTimes = [0, 0.15, 0.5, 1]
-        run(light, in: root, animations: [scale, alpha], duration: 0.5, delay: 0)
+        alpha.values = [0, 1, 0]
+        alpha.keyTimes = [0, 0.23, 1]
+        run(layer, in: root, animations: [scale, alpha], duration: 0.52, delay: 0)
     }
 
     /// A short-lived line of light from the lantern to the click.
@@ -379,15 +382,15 @@ enum Skin {
             container.addSublayer(tip)
             ribbon.fillColor = style.laser.cg(alpha: 0.8)
 
-        case .firefly:
-            // The laser point is the tail lantern itself (the overlay moves the firefly so its
-            // lantern sits on the point); this adds the lantern's halo, and the trail is its light.
-            let halo = shape(CGPath(ellipseIn: CGRect(x: -dot, y: -dot, width: dot * 2, height: dot * 2), transform: nil))
-            halo.fillColor = RGBA(hex: FireflyPalette.lightGlow, alpha: 0.35).cg()
-            glow(halo, RGBA(hex: FireflyPalette.lightGlow), radius: 10)
-            container.addSublayer(halo)
+        case .hotaru:
+            // "Holding the light": the lantern itself is the pointer dot (the overlay puts Hotaru's
+            // lantern on the point), with a white-hot center; the trail is amber lantern light.
+            let core = shape(CGPath(ellipseIn: CGRect(x: -dot / 3, y: -dot / 3, width: dot / 1.5, height: dot / 1.5), transform: nil))
+            core.fillColor = RGBA(hex: HotaruPalette.lanternCore).cg()
+            glow(core, RGBA(hex: HotaruPalette.lanternGlow), radius: 8)
+            container.addSublayer(core)
             ribbon.fillColor = style.laser.cg(alpha: 0.6)
-            ribbon.shadowColor = RGBA(hex: FireflyPalette.lightGlow).cg()
+            ribbon.shadowColor = RGBA(hex: HotaruPalette.lanternGlow).cg()
             ribbon.shadowOpacity = 0.8
             ribbon.shadowRadius = 4
             ribbon.shadowOffset = .zero
@@ -440,7 +443,7 @@ enum Skin {
 
     private static var companionCache: [String: CGImage] = [:]
 
-    /// The firefly in a pose, drawn with Core Graphics at 2× and cached. Facing right by default.
+    /// Hotaru in a pose, drawn with Core Graphics at 2× and cached. Facing right by default.
     static func companionImage(_ pose: CompanionPose, mirrored: Bool) -> CGImage? {
         let key = "\(pose.rawValue)-\(mirrored)"
         if let cached = companionCache[key] { return cached }
@@ -454,146 +457,194 @@ enum Skin {
             ctx.translateBy(x: companionSize, y: 0)
             ctx.scaleBy(x: -1, y: 1)
         }
-        drawFirefly(in: ctx, face: CompanionFace.of(pose))
+        drawHotaru(in: ctx, face: CompanionFace.of(pose))
         let image = ctx.makeImage()
         companionCache[key] = image
         return image
     }
 
-    /// The firefly in a 48×48 pt box (y up): a round night-teal body, a cream face that looks
-    /// toward the cursor (to the right), two antennae, clear wings and a light in its tail.
-    static func drawFirefly(in ctx: CGContext, face: CompanionFace) {
-        ctx.saveGState()
-        defer { ctx.restoreGState() }
-        ctx.translateBy(x: 6, y: 2) // room for the tail glow
-        func color(_ hex: UInt32, _ a: Double = 1) -> CGColor { RGBA(hex: hex, alpha: a).cg() }
-        func ellipse(_ r: CGRect, _ fill: CGColor) { ctx.setFillColor(fill); ctx.fillEllipse(in: r) }
+    /// The lantern's halo, a separate layer so the click flash and dozing can animate it.
+    static func makeLanternHalo() -> CAGradientLayer {
+        let halo = CAGradientLayer()
+        halo.type = .radial
+        halo.colors = [RGBA(hex: HotaruPalette.lanternCore, alpha: 0.9).cg(), RGBA(hex: HotaruPalette.lanternGlow, alpha: 0.55).cg(),
+                       RGBA(hex: HotaruPalette.lanternGlow, alpha: 0).cg()]
+        halo.locations = [0, 0.3, 1]
+        halo.startPoint = CGPoint(x: 0.5, y: 0.5)
+        halo.endPoint = CGPoint(x: 1, y: 1)
+        halo.bounds = CGRect(x: 0, y: 0, width: 34, height: 34)
+        halo.actions = ["position": NSNull(), "bounds": NSNull(), "opacity": NSNull(), "transform": NSNull()]
+        return halo
+    }
 
+    /// An ellipse outline with a slight hand-drawn wobble. The wobble is seeded, so a pose
+    /// always draws the same way and the outline never shimmers between frames.
+    static func wobblyEllipse(center c: CGPoint, rx: CGFloat, ry: CGFloat, seed: Double, amount: CGFloat = 0.06) -> CGPath {
+        let path = CGMutablePath()
+        let steps = 48
+        for i in 0...steps {
+            let t = CGFloat(i) / CGFloat(steps) * 2 * .pi
+            let k = 1 + amount * (0.55 * sin(3 * t + seed) + 0.3 * sin(5 * t + seed * 1.7) + 0.15 * sin(11 * t + seed * 2.3))
+            let p = CGPoint(x: c.x + cos(t) * rx * k, y: c.y + sin(t) * ry * k)
+            if i == 0 { path.move(to: p) } else { path.addLine(to: p) }
+        }
+        path.closeSubpath()
+        return path
+    }
+
+    /// Hotaru in a 48×48 pt box (y up), facing right: a dark umber abdomen ending in the lantern
+    /// (the only light), the ember collar, an olive head with two big eyes, misty wings over the
+    /// back, thin antennae and short legs. Ink outlines keep it readable on light slides, the
+    /// lantern and collar on dark ones. Direction art from Claude Design, implemented in code.
+    static func drawHotaru(in ctx: CGContext, face: CompanionFace) {
+        func color(_ hex: UInt32, _ a: Double = 1) -> CGColor { RGBA(hex: hex, alpha: a).cg() }
+        let ink = color(HotaruPalette.nightInk)
+        /// Fill, then a fuzzy two-pass ink outline.
+        func blob(_ c: CGPoint, _ rx: CGFloat, _ ry: CGFloat, _ fill: CGColor, seed: Double, line: CGFloat = 1.2) {
+            ctx.addPath(wobblyEllipse(center: c, rx: rx, ry: ry, seed: seed))
+            ctx.setFillColor(fill)
+            ctx.fillPath()
+            ctx.addPath(wobblyEllipse(center: c, rx: rx, ry: ry, seed: seed))
+            ctx.setStrokeColor(ink)
+            ctx.setLineWidth(line)
+            ctx.strokePath()
+            ctx.addPath(wobblyEllipse(center: c, rx: rx + 0.35, ry: ry + 0.35, seed: seed + 4, amount: 0.09))
+            ctx.setStrokeColor(color(HotaruPalette.nightInk, 0.4))
+            ctx.setLineWidth(0.6)
+            ctx.strokePath()
+        }
+        func stroke(_ points: [CGPoint], width: CGFloat = 1.1, curve: Bool = true, color strokeColor: CGColor? = nil) {
+            guard let first = points.first else { return }
+            ctx.move(to: first)
+            if curve, points.count == 3 {
+                ctx.addQuadCurve(to: points[2], control: points[1])
+            } else {
+                for p in points.dropFirst() { ctx.addLine(to: p) }
+            }
+            ctx.setStrokeColor(strokeColor ?? ink)
+            ctx.setLineWidth(width)
+            ctx.setLineCap(.round)
+            ctx.strokePath()
+        }
         func mix(_ a: UInt32, _ b: UInt32, _ t: Double) -> CGColor {
             let ca = RGBA(hex: a), cb = RGBA(hex: b)
             return RGBA(ca.red + (cb.red - ca.red) * t, ca.green + (cb.green - ca.green) * t, ca.blue + (cb.blue - ca.blue) * t).cg()
         }
 
-        // The tail lantern's glow: the only light on the firefly.
-        let lantern = CGPoint(x: lanternInBox.x - 6, y: lanternInBox.y - 2) // box -> this translated space
-        if face.glow > 0.05 {
-            let glowColors = [color(FireflyPalette.lightGlow, 0.9 * face.glow), color(FireflyPalette.lightGlow, 0)] as CFArray
-            if let g = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB), colors: glowColors, locations: [0, 1]) {
-                ctx.drawRadialGradient(g, startCenter: lantern, startRadius: 2, endCenter: lantern, endRadius: 7 + 12 * face.glow, options: [])
-            }
-        }
+        ctx.saveGState()
+        defer { ctx.restoreGState() }
+        // Work along the body axis: x runs from the lantern (negative) to the head (positive).
+        ctx.translateBy(x: bodyCenter.x, y: bodyCenter.y)
+        ctx.rotate(by: (bodyAngle + CGFloat(face.pitch)) * .pi / 180)
 
-        // Wings sit up over the back so they never cover the lantern.
-        func wing(_ origin: CGPoint, _ direction: Double, _ alpha: Double) {
+        // Legs under the abdomen.
+        for x in [-4.0, -0.5, 3.0] as [CGFloat] {
+            stroke([CGPoint(x: x, y: -3.6), CGPoint(x: x - 1.2, y: -6.2), CGPoint(x: x - 2.4, y: -7.4)], width: 1)
+        }
+        // Abdomen.
+        blob(CGPoint(x: -3, y: 0), 9.5, 4.6, color(HotaruPalette.body), seed: 1.1)
+
+        // The lantern: lit from inside, a rim stripe, dimmed to the "lantern dim" color when dozing.
+        let lantern = CGPoint(x: lanternOnAxis, y: 0)
+        let lit = face.glow
+        let coreColor = mix(HotaruPalette.lanternDim, HotaruPalette.lanternCore, min(1, lit / 0.6))
+        blob(lantern, 5.6, 5.2, coreColor, seed: 2.7, line: 1.3)
+        ctx.saveGState()
+        ctx.addPath(wobblyEllipse(center: lantern, rx: 5.6, ry: 5.2, seed: 2.7))
+        ctx.clip()
+        ctx.move(to: CGPoint(x: lantern.x + 2.2, y: lantern.y + 5.4))
+        ctx.addQuadCurve(to: CGPoint(x: lantern.x + 2.2, y: lantern.y - 5.4), control: CGPoint(x: lantern.x + 0.4, y: lantern.y))
+        ctx.setStrokeColor(mix(HotaruPalette.lanternDim, HotaruPalette.lanternRim, min(1, lit / 0.6)))
+        ctx.setLineWidth(1.4)
+        ctx.strokePath()
+        ctx.restoreGState()
+
+        // Ember collar: the identity mark.
+        blob(CGPoint(x: 6.6, y: 0.6), 2.6, 4.2, color(HotaruPalette.collar), seed: 3.9, line: 1.1)
+
+        // Wings over the back, rear then front, angled back toward the lantern.
+        func wing(_ base: CGPoint, _ angle: CGFloat, _ fill: UInt32, _ alpha: Double, seed: Double) {
             ctx.saveGState()
-            ctx.translateBy(x: origin.x, y: origin.y)
-            ctx.rotate(by: CGFloat((direction - 90) * .pi / 180))
-            let r = CGRect(x: -3.6, y: 0, width: 7.2, height: 14)
-            ctx.setFillColor(color(FireflyPalette.wing, alpha))
-            ctx.fillEllipse(in: r)
-            ctx.setStrokeColor(color(FireflyPalette.body, 0.5))
-            ctx.setLineWidth(0.8)
-            ctx.strokeEllipse(in: r)
+            ctx.translateBy(x: base.x, y: base.y)
+            ctx.rotate(by: angle * .pi / 180)
+            ctx.addPath(wobblyEllipse(center: CGPoint(x: 0, y: 6), rx: 3.4, ry: 6.6, seed: seed, amount: 0.05))
+            ctx.setFillColor(color(fill, alpha))
+            ctx.fillPath()
+            ctx.addPath(wobblyEllipse(center: CGPoint(x: 0, y: 6), rx: 3.4, ry: 6.6, seed: seed, amount: 0.05))
+            ctx.setStrokeColor(color(HotaruPalette.nightInk, 0.75))
+            ctx.setLineWidth(0.9)
+            ctx.strokePath()
             ctx.restoreGState()
         }
-        let wingDirection = 150 - face.wing * 1.2
-        wing(CGPoint(x: 20, y: 22), wingDirection - 14, 0.45)
+        let w = CGFloat(face.wing)
+        wing(CGPoint(x: 2.5, y: 3), 32 - w, HotaruPalette.wingRear, 0.9, seed: 5.2)
+        wing(CGPoint(x: 4, y: 3.2), 16 - w * 0.8, HotaruPalette.wingFront, 0.85, seed: 6.1)
 
-        // Body (thorax) and the dark front of the abdomen.
-        ellipse(CGRect(x: 12, y: 9, width: 18, height: 15), color(FireflyPalette.body))
-        ellipse(CGRect(x: 6.5, y: 8, width: 12, height: 11), color(FireflyPalette.bodyShade))
-
-        // The lantern: the last abdomen segments, lit from inside.
-        let lanternRect = CGRect(x: lantern.x - 6.5, y: lantern.y - 6, width: 13, height: 12)
+        // Head, tilted about the neck.
         ctx.saveGState()
-        ctx.addEllipse(in: lanternRect)
-        ctx.clip()
-        // Lit unless dozing: even the resting lantern reads as a light.
-        let lit = face.glow < 0.3 ? face.glow : 0.55 + face.glow * 0.45
-        let core = mix(FireflyPalette.lanternOff, FireflyPalette.lanternCore, lit)
-        let rim = mix(FireflyPalette.lanternOff, FireflyPalette.lanternRim, lit)
-        if let g = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB), colors: [core, rim] as CFArray, locations: [0, 1]) {
-            ctx.drawRadialGradient(g, startCenter: CGPoint(x: lantern.x - 1, y: lantern.y + 1), startRadius: 0,
-                                   endCenter: lantern, endRadius: 7.5, options: [.drawsAfterEndLocation])
-        }
-        ctx.restoreGState()
-        ctx.setStrokeColor(color(FireflyPalette.body, 0.5))
-        ctx.setLineWidth(0.8)
-        ctx.strokeEllipse(in: lanternRect)
-        // Segment line across the lantern.
-        ctx.move(to: CGPoint(x: lantern.x + 1.5, y: lantern.y + 5.5))
-        ctx.addQuadCurve(to: CGPoint(x: lantern.x + 1.5, y: lantern.y - 5.5), control: CGPoint(x: lantern.x - 1, y: lantern.y))
-        ctx.setStrokeColor(color(FireflyPalette.body, 0.35))
-        ctx.strokePath()
-
-        wing(CGPoint(x: 18, y: 21), wingDirection, 0.75)
-
-        // Head, tilted toward the cursor.
-        ctx.saveGState()
-        let neck = CGPoint(x: 27, y: 19)
+        let neck = CGPoint(x: 9, y: 1)
         ctx.translateBy(x: neck.x, y: neck.y)
-        ctx.rotate(by: CGFloat(-face.tilt * .pi / 180))
+        ctx.rotate(by: CGFloat(face.tilt) * .pi / 180)
         ctx.translateBy(x: -neck.x, y: -neck.y)
+        let head = CGPoint(x: 13.2, y: 1.6)
+        // Antennae: thin curves up and forward.
+        stroke([CGPoint(x: 11.5, y: 6.6), CGPoint(x: 10.5, y: 11), CGPoint(x: 8.2, y: 14.5)], width: 1)
+        stroke([CGPoint(x: 14, y: 7.2), CGPoint(x: 15.8, y: 11.4), CGPoint(x: 15.2, y: 15.6)], width: 1)
+        blob(head, 5.6, 5.6, color(HotaruPalette.head), seed: 7.3)
 
-        // Antennae with small knobs (unlit: the lantern is the only light).
-        ctx.setStrokeColor(color(FireflyPalette.body))
-        ctx.setLineWidth(1.4)
-        ctx.setLineCap(.round)
-        for (base, tip, ctl) in [(CGPoint(x: 26, y: 31), CGPoint(x: 23, y: 39), CGPoint(x: 23, y: 35)),
-                                 (CGPoint(x: 31, y: 31), CGPoint(x: 35, y: 39), CGPoint(x: 35, y: 34))] {
-            ctx.move(to: base)
-            ctx.addQuadCurve(to: tip, control: ctl)
-            ctx.strokePath()
-            ellipse(CGRect(x: tip.x - 1.8, y: tip.y - 1.8, width: 3.6, height: 3.6), color(FireflyPalette.body))
-        }
-
-        ellipse(CGRect(x: 19, y: 15, width: 18, height: 18), color(FireflyPalette.body))
-        let faceRect = CGRect(x: 22, y: 16.5, width: 14, height: 13)
-        ellipse(faceRect, color(FireflyPalette.face))
-        ellipse(CGRect(x: 23, y: 19.5, width: 3, height: 2), color(FireflyPalette.cheek, 0.7))
-        ellipse(CGRect(x: 32.5, y: 19.5, width: 3, height: 2), color(FireflyPalette.cheek, 0.7))
-
-        // Eyes look toward the cursor (right).
-        ctx.setStrokeColor(color(FireflyPalette.eye))
-        ctx.setLineWidth(1.3)
-        for x in [26.6, 31.6] {
-            let c = CGPoint(x: x, y: 24)
+        // Eyes: two big cream eyes looking forward; the face stays simple.
+        let eyes = [CGPoint(x: 13.6, y: 2.6), CGPoint(x: 17.0, y: 1.4)]
+        for (i, e) in eyes.enumerated() {
             switch face.eyes {
             case .open, .wide:
-                let w: CGFloat = face.eyes == .wide ? 3.2 : 2.6, h: CGFloat = face.eyes == .wide ? 3.8 : 3.2
-                ellipse(CGRect(x: c.x - w / 2, y: c.y - h / 2, width: w, height: h), color(FireflyPalette.eye))
-                ellipse(CGRect(x: c.x - w / 2 + 1.4, y: c.y + h / 2 - 1.5, width: 1, height: 1), color(0xFFFFFF))
-            case .happy:
-                ctx.move(to: CGPoint(x: c.x - 1.6, y: c.y - 0.5))
-                ctx.addQuadCurve(to: CGPoint(x: c.x + 1.6, y: c.y - 0.5), control: CGPoint(x: c.x, y: c.y + 2.2))
-                ctx.strokePath()
+                let r: CGFloat = face.eyes == .wide ? 2.1 : 1.8
+                blob(e, r, r * 1.05, color(HotaruPalette.eye), seed: 8.1 + Double(i), line: 0.7)
+                let pupil = CGPoint(x: e.x + 0.5, y: e.y + (face.eyes == .wide ? 0.5 : 0.1))
+                ctx.setFillColor(ink)
+                ctx.fillEllipse(in: CGRect(x: pupil.x - 0.9, y: pupil.y - 0.9, width: 1.8, height: 1.8))
+                ctx.setFillColor(color(0xFFFFFF))
+                ctx.fillEllipse(in: CGRect(x: pupil.x - 0.1, y: pupil.y + 0.2, width: 0.6, height: 0.6))
             case .half:
-                ellipse(CGRect(x: c.x - 1.3, y: c.y - 1.2, width: 2.6, height: 1.8), color(FireflyPalette.eye))
+                blob(e, 1.8, 1.2, color(HotaruPalette.eye), seed: 8.1 + Double(i), line: 0.7)
+                ctx.setFillColor(ink)
+                ctx.fillEllipse(in: CGRect(x: e.x - 0.4, y: e.y - 0.8, width: 1.6, height: 1.3))
+                stroke([CGPoint(x: e.x - 1.9, y: e.y + 0.6), CGPoint(x: e.x + 1.9, y: e.y + 0.4)], width: 0.9, curve: false)
+            // Closed eyes are light strokes so they read on the dark head.
+            case .happy:
+                stroke([CGPoint(x: e.x - 1.5, y: e.y - 0.5), CGPoint(x: e.x, y: e.y + 1.5), CGPoint(x: e.x + 1.5, y: e.y - 0.5)],
+                       width: 1.1, color: color(HotaruPalette.eye))
             case .closed:
-                ctx.move(to: CGPoint(x: c.x - 1.5, y: c.y))
-                ctx.addQuadCurve(to: CGPoint(x: c.x + 1.5, y: c.y), control: CGPoint(x: c.x, y: c.y - 1.6))
+                stroke([CGPoint(x: e.x - 1.5, y: e.y + 0.3), CGPoint(x: e.x, y: e.y - 1.1), CGPoint(x: e.x + 1.5, y: e.y + 0.3)],
+                       width: 1.1, color: color(HotaruPalette.eye, 0.85))
+            }
+        }
+        if face.blush {
+            ctx.setFillColor(color(HotaruPalette.blush, 0.85))
+            ctx.fillEllipse(in: CGRect(x: 17.6, y: -1.6, width: 2.2, height: 1.3))
+        }
+        switch face.mouth {
+        case .none: break
+        case .smile: stroke([CGPoint(x: 14.4, y: -1.3), CGPoint(x: 15.6, y: -2.6), CGPoint(x: 16.8, y: -1.5)], width: 1, color: color(HotaruPalette.blush))
+        case .open:
+            ctx.setFillColor(color(HotaruPalette.blush))
+            ctx.fillEllipse(in: CGRect(x: 15, y: -2.4, width: 1.6, height: 1.4))
+        }
+        ctx.restoreGState()
+
+        // Waving: the front leg raised beside the face.
+        if face.wave > 0 {
+            // Reaches out past the face so it reads against the light behind it, with two motion marks.
+            let lift = CGFloat(face.wave)
+            let tip = CGPoint(x: 21 + 1.5 * lift, y: -3 + 7 * lift)
+            stroke([CGPoint(x: 7, y: -3.6), CGPoint(x: 15, y: -6.5 + 2 * lift), tip], width: 1.3)
+            for k in 0..<2 {
+                let r = 2.2 + CGFloat(k) * 1.6
+                ctx.addArc(center: tip, radius: r, startAngle: -0.5, endAngle: 0.6, clockwise: false)
+                ctx.setStrokeColor(color(HotaruPalette.nightInk, 0.45))
+                ctx.setLineWidth(0.7)
                 ctx.strokePath()
             }
         }
-
-        // Mouth.
-        let m = CGPoint(x: 29.2, y: 20)
-        ctx.setLineWidth(1.1)
-        switch face.mouth {
-        case .smile:
-            ctx.move(to: CGPoint(x: m.x - 1.6, y: m.y + 0.6))
-            ctx.addQuadCurve(to: CGPoint(x: m.x + 1.6, y: m.y + 0.6), control: CGPoint(x: m.x, y: m.y - 1.2))
-            ctx.strokePath()
-        case .open:
-            ellipse(CGRect(x: m.x - 1.5, y: m.y - 1.2, width: 3, height: 2.4), color(0xC0504D))
-        case .flat:
-            ctx.move(to: CGPoint(x: m.x - 1.2, y: m.y))
-            ctx.addLine(to: CGPoint(x: m.x + 1.2, y: m.y))
-            ctx.strokePath()
-        case .small:
-            ellipse(CGRect(x: m.x - 0.8, y: m.y - 0.6, width: 1.6, height: 1.4), color(FireflyPalette.eye))
-        }
-        ctx.restoreGState()
     }
 
     // MARK: Menu-bar icon
@@ -604,16 +655,46 @@ enum Skin {
         case .brushInk: return NSImage(systemSymbolName: "paintbrush.pointed", accessibilityDescription: "Cursor highlighter")
         case .cyberpunk: return NSImage(systemSymbolName: "scope", accessibilityDescription: "Cursor highlighter")
         case .keynoteGlow: return NSImage(systemSymbolName: "sparkles", accessibilityDescription: "Cursor highlighter")
-        case .firefly:
-            let image = NSImage(size: NSSize(width: 22, height: 22), flipped: false) { rect in
-                guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
-                ctx.scaleBy(x: rect.width / companionSize, y: rect.height / companionSize)
-                drawFirefly(in: ctx, face: CompanionFace.of(.rest))
-                return true
-            }
-            image.accessibilityDescription = "Cursor highlighter"
-            return image
+        case .hotaru:
+            return hotaruTemplateIcon()
         }
+    }
+
+    /// The 18 pt menu-bar template: a solid black silhouette on clear so macOS tints it, with the
+    /// lantern as a hollow ring around a dot (a template icon cannot glow).
+    static func hotaruTemplateIcon() -> NSImage {
+        let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { _ in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+            ctx.setFillColor(NSColor.black.cgColor)
+            ctx.setStrokeColor(NSColor.black.cgColor)
+            // Lantern: ring and dot, lower left.
+            ctx.setLineWidth(1.7)
+            ctx.strokeEllipse(in: CGRect(x: 1.4, y: 1.4, width: 6.2, height: 6.2))
+            ctx.fillEllipse(in: CGRect(x: 3.6, y: 3.6, width: 1.8, height: 1.8))
+            // Body and head along a diagonal, up to the right.
+            ctx.saveGState()
+            ctx.translateBy(x: 9.6, y: 8.6)
+            ctx.rotate(by: 40 * .pi / 180)
+            ctx.fillEllipse(in: CGRect(x: -3.6, y: -2.2, width: 7.2, height: 4.4))
+            ctx.restoreGState()
+            ctx.fillEllipse(in: CGRect(x: 10.6, y: 9.8, width: 5.2, height: 5.2))
+            // One wing, up and back, separated from the body by a clear gap.
+            ctx.saveGState()
+            ctx.translateBy(x: 7.4, y: 12.2)
+            ctx.rotate(by: 25 * .pi / 180)
+            ctx.fillEllipse(in: CGRect(x: -1.7, y: -1.2, width: 3.4, height: 6))
+            ctx.restoreGState()
+            // Antenna.
+            ctx.setLineWidth(1.2)
+            ctx.setLineCap(.round)
+            ctx.move(to: CGPoint(x: 14.6, y: 14.6))
+            ctx.addLine(to: CGPoint(x: 16.6, y: 17))
+            ctx.strokePath()
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = "Cursor highlighter"
+        return image
     }
 
     // MARK: Helpers

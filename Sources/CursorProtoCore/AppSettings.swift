@@ -68,7 +68,10 @@ public enum InkInput: String, Codable, CaseIterable, Sendable {
 /// clamps out-of-range numbers, so an old or hand-edited preference can never break the app.
 public struct AppSettings: Codable, Equatable, Sendable {
     public var enabled = true
-    public var theme = Theme.minimal
+    /// Hotaru on first launch.
+    public var theme = Theme.hotaru
+    /// Set after Hotaru has waved hello once.
+    public var greeted = false
 
     public var ringMode = RingMode.always
     public var ringDiameter = 44.0
@@ -92,6 +95,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var keycapShowRepeatCount = true
     public var keycapHideActivationKeys = true
     public var keycapLingerSeconds = 1.6
+    /// Shortcut Subtitles: say what a shortcut does in the frontmost app, under the keycaps.
+    public var keycapSubtitles = true
 
     public var laserColor = RGBA.laserRed
     public var laserTrailSeconds = 0.45
@@ -118,6 +123,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
         }
         enabled = v(.enabled, d.enabled)
         theme = v(.theme, d.theme)
+        greeted = v(.greeted, d.greeted)
+        keycapSubtitles = v(.keycapSubtitles, d.keycapSubtitles)
         ringMode = v(.ringMode, d.ringMode)
         ringDiameter = v(.ringDiameter, d.ringDiameter)
         ringLineWidth = v(.ringLineWidth, d.ringLineWidth)

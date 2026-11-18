@@ -7,6 +7,10 @@ import CursorProtoCore
 final class KeycapHUD: NSObject, NSWindowDelegate {
     private let window: NSPanel
     private let stack = NSStackView()
+    /// The caps row above, the Shortcut Subtitle below.
+    private let column = NSStackView()
+    /// The app whose dictionary the preview uses, instead of the frontmost app.
+    private var previewApp: String?
     private var feed: KeycapFeed
     private var settings: AppSettings
     private var clearTimer: Timer?
@@ -26,15 +30,19 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
         stack.orientation = .horizontal
         stack.spacing = 8
         stack.edgeInsets = NSEdgeInsets(top: 10, left: 12, bottom: 10, right: 12)
+        column.orientation = .vertical
+        column.alignment = .centerX
+        column.spacing = 2
+        column.addArrangedSubview(stack)
         let container = NSView()
         container.wantsLayer = true
-        container.addSubview(stack)
-        stack.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(column)
+        column.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            stack.topAnchor.constraint(equalTo: container.topAnchor),
-            stack.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            column.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            column.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            column.topAnchor.constraint(equalTo: container.topAnchor),
+            column.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -6),
         ])
         window.contentView = container
         apply(settings)
@@ -54,7 +62,10 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
     }
 
     func record(_ stroke: KeyStroke, isRepeat: Bool) {
-        guard !suppressed, feed.record(stroke, time: CACurrentMediaTime(), isRepeat: isRepeat) else { return }
+        // Shortcut Subtitles: the name comes from the dictionary of the app the key went to.
+        let app = previewApp ?? NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        let subtitle = settings.keycapSubtitles ? ShortcutSubtitles.subtitle(for: stroke, bundleID: app) : nil
+        guard !suppressed, feed.record(stroke, time: CACurrentMediaTime(), isRepeat: isRepeat, subtitle: subtitle) else { return }
         render()
         clearTimer?.invalidate()
         clearTimer = Timer.scheduledTimer(withTimeInterval: feed.linger + 0.02, repeats: false) { [weak self] _ in
@@ -71,28 +82,31 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
         render()
     }
 
-    /// Plays a sample sequence through the real feed and HUD, so the look and position can be
-    /// checked without Input Monitoring. Uses "shortcuts only" when keycaps are off.
-    func preview() {
+    /// Plays a sample through the real feed, subtitles and HUD, so the look, position and
+    /// Shortcut Subtitles can be checked without Input Monitoring. `bundleID` picks the app
+    /// dictionary (default: the frontmost app). Uses "shortcuts only" when keycaps are off.
+    func preview(bundleID: String? = nil) {
         let saved = feed.mode
         if feed.mode == .off { feed.mode = .shortcutsOnly }
-        let cmd: KeyModifiers = [.command]
-        let steps: [(Double, KeyStroke, Bool)] = [
-            (0.0, KeyStroke(keyCode: 8, modifiers: cmd), false), // ⌘C
-            (0.6, KeyStroke(keyCode: 9, modifiers: cmd), false), // ⌘V
-            (1.3, KeyStroke(keyCode: 6, modifiers: cmd), false), // ⌘Z
-            (1.6, KeyStroke(keyCode: 6, modifiers: cmd), false),
-            (1.9, KeyStroke(keyCode: 6, modifiers: cmd), false),
-            (2.3, AppShortcut.toggleLaser.stroke, false), // hidden when "hide activation keys" is on
-            (2.7, KeyStroke(keyCode: 40, modifiers: [.shift, .command]), false), // ⇧⌘K
-        ]
-        for (delay, stroke, isRepeat) in steps {
+        let app = bundleID ?? NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        previewApp = app
+        var steps: [(Double, KeyStroke)] = []
+        var t = 0.0
+        for stroke in ShortcutSubtitles.previewStrokes(bundleID: app) {
+            if let last = steps.last?.1, last.matches(stroke) { t += 0.35 } else if !steps.isEmpty { t += 1.1 }
+            steps.append((t, stroke))
+        }
+        steps.append((t + 0.5, AppShortcut.toggleLaser.stroke)) // hidden when "hide activation keys" is on
+        for (delay, stroke) in steps {
             Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
-                MainActor.assumeIsolated { self?.record(stroke, isRepeat: isRepeat) }
+                MainActor.assumeIsolated { self?.record(stroke, isRepeat: false) }
             }
         }
-        Timer.scheduledTimer(withTimeInterval: 2.8, repeats: false) { [weak self] _ in
-            MainActor.assumeIsolated { self?.feed.mode = saved }
+        Timer.scheduledTimer(withTimeInterval: t + 0.6, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.feed.mode = saved
+                self?.previewApp = nil
+            }
         }
     }
 
@@ -119,12 +133,16 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
             texts = feed.entries.map { $0.display(showCount: settings.keycapShowRepeatCount) }
         }
         for v in stack.arrangedSubviews { v.removeFromSuperview() }
+        for v in column.arrangedSubviews where v !== stack { v.removeFromSuperview() }
         guard !texts.isEmpty, !suppressed else {
             window.orderOut(nil)
             return
         }
         for t in texts { stack.addArrangedSubview(cap(t, dashed: isPositioning)) }
-        window.setContentSize(stack.fittingSize)
+        if !isPositioning, settings.keycapSubtitles, let subtitle = feed.currentSubtitle {
+            column.addArrangedSubview(subtitleView(subtitle))
+        }
+        window.setContentSize(column.fittingSize)
         place()
         window.orderFrontRegardless()
     }
@@ -156,14 +174,62 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
         onMoved?(UnitPoint(x: (f.midX - vf.minX) / vf.width, y: (f.midY - vf.minY) / vf.height))
     }
 
-    /// One cap in the theme's style: dark glass (Minimal), night-teal plaque with a light (Firefly),
+    /// The Shortcut Subtitle under the caps, in the theme's voice: a lantern-lit caption for Hotaru
+    /// (a caption under the keys, not a speech bubble: the character sheet keeps Hotaru wordless),
+    /// a terminal comment for Cyberpunk, a plain caption otherwise.
+    private func subtitleView(_ text: String) -> NSView {
+        let label = NSTextField(labelWithString: text)
+        let box = NSView()
+        box.wantsLayer = true
+        box.layer?.cornerRadius = 8
+        var leading: CGFloat = 12
+        switch settings.theme {
+        case .cyberpunk:
+            label.stringValue = "// " + text.lowercased()
+            label.font = .monospacedSystemFont(ofSize: 18, weight: .medium)
+            label.textColor = RGBA(hex: CyberPalette.acid).nsColor
+            box.layer?.backgroundColor = RGBA(hex: CyberPalette.night, alpha: 0.9).cg()
+            box.layer?.cornerRadius = 3
+        case .hotaru:
+            label.font = .systemFont(ofSize: 19, weight: .semibold)
+            label.textColor = RGBA(hex: HotaruPalette.lanternCore).nsColor
+            box.layer?.backgroundColor = RGBA(hex: HotaruPalette.nightInk, alpha: 0.88).cg()
+            box.layer?.cornerRadius = 12
+            // A small lit lantern dot marks it as Hotaru's caption.
+            let dot = CALayer()
+            dot.backgroundColor = RGBA(hex: HotaruPalette.lanternCore).cg()
+            dot.frame = CGRect(x: 11, y: 11, width: 8, height: 8)
+            dot.cornerRadius = 4
+            dot.shadowColor = RGBA(hex: HotaruPalette.lanternGlow).cg()
+            dot.shadowOpacity = 1
+            dot.shadowRadius = 4
+            dot.shadowOffset = .zero
+            box.layer?.addSublayer(dot)
+            leading = 26
+        default:
+            label.font = .systemFont(ofSize: 18, weight: .medium)
+            label.textColor = .white
+            box.layer?.backgroundColor = NSColor(white: 0.08, alpha: 0.75).cgColor
+        }
+        box.addSubview(label)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: leading),
+            label.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -12),
+            label.topAnchor.constraint(equalTo: box.topAnchor, constant: 5),
+            label.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -5),
+        ])
+        return box
+    }
+
+    /// One cap in the theme's style: dark glass (Minimal), night-ink plaque with a lit lantern dot (Hotaru),
     /// hanji tag with a seal mark (Brush & Ink) or frosted glass (Keynote Glow).
     private func cap(_ text: String, dashed: Bool) -> NSView {
         let style = settings.style
         let label = NSTextField(labelWithString: text)
         label.textColor = style.keycapText.nsColor
         switch settings.theme {
-        case .firefly:
+        case .hotaru:
             label.font = .systemFont(ofSize: 30, weight: .bold)
         case .cyberpunk:
             label.font = .monospacedSystemFont(ofSize: 28, weight: .semibold)
@@ -205,12 +271,12 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
             box.layer?.addSublayer(lines)
             box.layer?.masksToBounds = true
         }
-        if settings.theme == .firefly {
+        if settings.theme == .hotaru {
             let light = CALayer()
-            light.backgroundColor = RGBA(hex: FireflyPalette.light).cg()
+            light.backgroundColor = RGBA(hex: HotaruPalette.lanternCore).cg()
             light.frame = CGRect(x: 6, y: 6, width: 6, height: 6)
             light.cornerRadius = 3
-            light.shadowColor = RGBA(hex: FireflyPalette.lightGlow).cg()
+            light.shadowColor = RGBA(hex: HotaruPalette.lanternGlow).cg()
             light.shadowOpacity = 1
             light.shadowRadius = 3
             light.shadowOffset = .zero

@@ -14,7 +14,10 @@ final class OverlayController {
     private let ring = CALayer()
     private let laserDot = CALayer()
     private let laserRibbon = CAShapeLayer()
+    /// Hotaru: a container holding the lantern halo behind the drawn character.
     private let companion = CALayer()
+    private let companionSprite = CALayer()
+    private let halo = Skin.makeLanternHalo()
     private var companionAnim = CompanionAnimator()
     private var companionTimer: Timer?
     private var companionKey = ""
@@ -41,7 +44,7 @@ final class OverlayController {
             guard laserOn != oldValue else { return }
             trail.clear()
             laserRibbon.path = nil
-            if settings.theme == .firefly, let p = lastCursor {
+            if settings.theme == .hotaru, let p = lastCursor {
                 CATransaction.begin()
                 CATransaction.setDisableActions(true)
                 placeCompanion(cursor: p)
@@ -77,6 +80,10 @@ final class OverlayController {
         ring.zPosition = 3
         companion.zPosition = 4
         companion.bounds = CGRect(x: 0, y: 0, width: Skin.companionSize, height: Skin.companionSize)
+        companionSprite.frame = companion.bounds
+        companionSprite.actions = ["contents": NSNull(), "position": NSNull(), "bounds": NSNull()]
+        companion.addSublayer(halo)
+        companion.addSublayer(companionSprite)
         apply(settings)
         rebuildWindows()
     }
@@ -88,7 +95,6 @@ final class OverlayController {
         trail.duration = s.laserTrailSeconds * s.style.laserTrailScale
         trail.maxWidth = s.laserWidth * (s.theme == .keynoteGlow ? 1.8 : 1)
         Skin.buildRing(into: ring, settings: s)
-        arcFacingLeft = false
         Skin.styleLaser(tip: laserDot, ribbon: laserRibbon, settings: s)
         companionKey = ""
         refreshCompanion()
@@ -221,7 +227,7 @@ final class OverlayController {
             w.root.addSublayer(companion)
         }
         let p = w.local(global)
-        if settings.theme == .firefly, let last = lastCursor {
+        if settings.theme == .hotaru, let last = lastCursor {
             companionAnim.moved(dx: p.x - last.x, dy: p.y - last.y, time: CACurrentMediaTime())
         }
         lastCursor = p
@@ -229,13 +235,14 @@ final class OverlayController {
         CATransaction.setDisableActions(true)
         ring.position = p
         laserDot.position = p
-        if settings.theme == .firefly { placeCompanion(cursor: p) }
+        if settings.theme == .hotaru { placeCompanion(cursor: p) }
         CATransaction.commit()
         refreshCompanion()
     }
 
-    /// The firefly leads the cursor with its tail lantern on the ring's rim, so the ring reads as
-    /// the lantern's light; with the laser on, the lantern sits on the laser point itself.
+    /// Hotaru sits beside the pointer with its lantern on the ring's rim (upper right while moving
+    /// right, upper left while moving left), so the ring reads as the lantern's light and the body
+    /// never covers the click point; with the laser on, the lantern is the laser point itself.
     /// Call inside a transaction with actions disabled.
     private func placeCompanion(cursor p: CGPoint) {
         let left = companionAnim.facingLeft
@@ -244,20 +251,47 @@ final class OverlayController {
             let a = Skin.lanternAngle(facingLeft: left), r = settings.ringDiameter / 2
             target = CGPoint(x: p.x + cos(a) * r, y: p.y + sin(a) * r)
         }
-        let off = Skin.lanternOffset(facingLeft: left)
+        let off = Skin.lanternOffset(facingLeft: left, pose: currentPose)
         companion.position = CGPoint(x: target.x - off.x, y: target.y - off.y)
-        if left != arcFacingLeft, let arc = ring.sublayers?.first(where: { $0.name == "lanternArc" }) {
-            arcFacingLeft = left
-            arc.transform = CATransform3DMakeRotation(Skin.lanternAngle(facingLeft: left), 0, 0, 1)
-        }
     }
 
-    private var arcFacingLeft = false
+    private var currentPose = CompanionPose.rest
 
     /// The lantern's position in the cursor window's coordinates.
     private var lanternPoint: CGPoint {
-        let off = Skin.lanternOffset(facingLeft: companionAnim.facingLeft)
+        let off = Skin.lanternOffset(facingLeft: companionAnim.facingLeft, pose: currentPose)
         return CGPoint(x: companion.position.x + off.x, y: companion.position.y + off.y)
+    }
+
+    /// First launch: Hotaru waves hello beside the cursor.
+    func greet() {
+        guard settings.theme == .hotaru else { return }
+        companionAnim.greet(time: CACurrentMediaTime())
+        if let p = lastCursor ?? cursorWindow.map({ $0.local(NSEvent.mouseLocation) }) {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            placeCompanion(cursor: p)
+            CATransaction.commit()
+        }
+        refreshCompanion()
+        updateCursorLayers(animated: true)
+    }
+
+    /// The click flash on the lantern: about 120 ms up, 400 ms back (character sheet).
+    private func flashLantern() {
+        let base = halo.opacity
+        let scale = CAKeyframeAnimation(keyPath: "transform.scale")
+        scale.values = [1, 1.7, 1]
+        let alpha = CAKeyframeAnimation(keyPath: "opacity")
+        alpha.values = [base, 1, base]
+        for a in [scale, alpha] {
+            a.keyTimes = [0, 0.23, 1]
+            a.timingFunctions = [CAMediaTimingFunction(name: .easeOut), CAMediaTimingFunction(name: .easeInEaseOut)]
+        }
+        let group = CAAnimationGroup()
+        group.animations = [scale, alpha]
+        group.duration = 0.52
+        halo.add(group, forKey: "flash")
     }
 
     private func pressed(_ button: MouseButton, at global: NSPoint) {
@@ -267,11 +301,12 @@ final class OverlayController {
             autoReleaseTimer?.invalidate()
             beginStroke(at: global)
         } else if settings.ripplesEnabled, let w = window(containing: global) {
-            let lantern = settings.theme == .firefly && w === cursorWindow ? lanternPoint : nil
+            let lantern = settings.theme == .hotaru && w === cursorWindow ? lanternPoint : nil
             Skin.addClickEffect(to: w.root, at: w.local(global), button: button, settings: settings, lantern: lantern)
         }
-        if settings.theme == .firefly && !inkArmed {
+        if settings.theme == .hotaru && !inkArmed {
             companionAnim.clicked(button, time: CACurrentMediaTime())
+            if button == .left { flashLantern() }
             refreshCompanion()
         }
         animateRingScale(0.82)
@@ -304,9 +339,12 @@ final class OverlayController {
         let laserShown = visible && laserOn && !idleHidden
         fade(ring, to: ringWanted ? Float(settings.ringOpacity) : 0, animated: animated)
         fade(laserDot, to: laserShown ? 1 : 0, animated: animated)
-        // The firefly stays, dimmed and dozing, when the ring hides for idle; it leaves with the ring otherwise.
-        let companionShown = visible && settings.theme == .firefly && settings.ringMode != .off && (ringWanted || laserShown || idleHidden)
-        fade(companion, to: companionShown ? (idleHidden ? 0.6 : 1) : 0, animated: animated)
+        // Hotaru stays when the ring hides for idle, dozing with its lantern dimmed (not hidden),
+        // and while it waves hello.
+        let waving = companionAnim.isWaving(at: CACurrentMediaTime())
+        let companionShown = visible && settings.theme == .hotaru && settings.ringMode != .off
+            && (ringWanted || laserShown || idleHidden || waving)
+        fade(companion, to: companionShown ? 1 : 0, animated: animated)
         refreshCompanion()
     }
 
@@ -362,23 +400,29 @@ final class OverlayController {
     /// Shows the companion's current pose; a one-shot timer covers changes with no input
     /// (settling to stand, the salute's sparkle and end), so a still cursor costs nothing.
     private func refreshCompanion() {
-        guard settings.theme == .firefly else { return }
+        guard settings.theme == .hotaru else { return }
         let now = CACurrentMediaTime()
         let pose = companionAnim.pose(at: now, laser: laserOn, idle: idleHidden)
         let key = "\(pose.rawValue)-\(companionAnim.facingLeft)"
         if key != companionKey {
             companionKey = key
+            currentPose = pose
+            let l = Skin.lanternInBox(pose)
+            halo.position = CGPoint(x: companionAnim.facingLeft ? Skin.companionSize - l.x : l.x, y: l.y)
+            halo.opacity = Float(CompanionFace.of(pose).glow)
+            if let p = lastCursor { placeCompanion(cursor: p) }
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            companion.contents = Skin.companionImage(pose, mirrored: companionAnim.facingLeft)
-            companion.contentsScale = 2
+            companionSprite.contents = Skin.companionImage(pose, mirrored: companionAnim.facingLeft)
+            companionSprite.contentsScale = 2
             CATransaction.commit()
         }
         guard companionTimer == nil, let next = companionAnim.nextChange(after: now) else { return }
         companionTimer = Timer.scheduledTimer(withTimeInterval: max(next - now, 0.02), repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.companionTimer = nil
-                self?.refreshCompanion()
+                // Also re-evaluates visibility, e.g. when the hello wave ends.
+                self?.updateCursorLayers(animated: true)
             }
         }
     }
@@ -525,8 +569,8 @@ final class InkStroke {
             layer.shadowOpacity = tool == .highlighter ? 0 : 0.85
             layer.shadowRadius = 1.2
             layer.shadowOffset = .zero
-        case .firefly: // a faint warm glow along the stroke
-            layer.shadowColor = RGBA(hex: FireflyPalette.lightGlow).cg()
+        case .hotaru: // a faint lantern glow along the stroke
+            layer.shadowColor = RGBA(hex: HotaruPalette.lanternGlow).cg()
             layer.shadowOpacity = tool == .highlighter ? 0 : 0.7
             layer.shadowRadius = 2.5
             layer.shadowOffset = .zero
