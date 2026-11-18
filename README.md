@@ -26,17 +26,46 @@ mouse monitors, so it receives no events and uses no CPU.
 ### Themes
 
 Menu › Theme (or Settings) switches the look of every overlay; behavior and timing stay the same.
+Hotaru is the theme on first launch.
 
 | Theme | Ring | Click | Laser | Keycaps |
 |---|---|---|---|---|
-| Minimal (default) | colored ring | ripple, color per button | dot and tapered trail | dark glass |
-| Firefly (working name) | an arc of light from the firefly's tail lantern, brightest where the lantern touches it | the lantern pulses, beams to the click, a ring of light spreads | the lantern is the laser point and leaves the trail | night-teal plaques |
-| Cyberpunk | neon reticle | target-lock brackets labeled LMB, RMB, MMB | neon beam | terminal keycaps with scanlines |
+| Hotaru (default) | a pool of light from Hotaru's tail lantern, which sits on the ring's rim | the lantern flashes (about 120 ms up, 400 ms back), short rays, a beam to the click | the lantern is the laser point, its amber light the trail | night-ink plaques; subtitle as a lantern-lit caption |
+| Cyberpunk | neon reticle | target-lock brackets labeled LMB, RMB, MMB | neon beam | terminal keycaps; subtitle as a `// comment` |
+| Minimal | colored ring | ripple, color per button | dot and tapered trail | dark glass; plain subtitle |
 
-The firefly companion leads the cursor, beams on a left click, tilts its head on right and middle
-clicks, holds full light with the laser, and dozes when the cursor is still. Two earlier concepts,
-Brush & Ink and Keynote Glow, are parked: their code stays (`Theme.isParked`), but they are not
-offered in the menu or Settings.
+Hotaru is a hand-drawn firefly (direction art from Claude Design, implemented in code). It rests
+beside the pointer, beats its wings while moving, tilts its head at right and middle clicks, holds
+its light as the laser pointer, dozes with the lantern dimmed to about 15% when the cursor is
+still, and waves hello once on first launch. Brush & Ink and Keynote Glow are parked: their code
+stays (`Theme.isParked`), but they are not offered in the menu or Settings.
+
+**Future theme ideas:** a solar-system theme family (owner idea, for later).
+
+### Shortcut Subtitles
+
+Keycaps also say what a shortcut does in the frontmost app: ⇧⌘P in VS Code shows "Command
+Palette", ⌃R in Terminal shows "Search History". The names come from bundled dictionaries of each
+app's documented default key bindings (`ShortcutSubtitles` in `CursorProtoCore`).
+
+- **Apps covered:** VS Code, Xcode, Terminal, iTerm2, Chrome, Safari, Finder, Keynote, PowerPoint
+  and Figma, plus a few universal macOS shortcuts such as Copy and Undo.
+- **Unknown shortcuts:** a shortcut not in the dictionary shows only its keycap, because a wrong
+  name is worse than none.
+- **App detection:** `NSWorkspace.frontmostApplication`, which needs no permission. Live keys still
+  need Input Monitoring.
+- **Turning it off:** Keycaps › Shortcut Subtitles, or Settings.
+
+For demos without Input Monitoring:
+
+- **Menu:** Keycaps › "Preview subtitles for…" plays a sample through the real feed.
+- **Launch argument:**
+
+  ```sh
+  open -g build/CursorProto.app --args --preview-keycaps com.microsoft.VSCode 2
+  ```
+
+  This plays the sample for that app after 2 s.
 
 The theme sets its own colors; the color pickers apply to Minimal. The companion is drawn with
 Core Graphics, and its poses come from an event-driven animator in `CursorProtoCore`, so a still

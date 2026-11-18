@@ -68,6 +68,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if settings.keycapMode != .off { lastKeycapMode = settings.keycapMode; startKeycaps(prompt: false) }
         frontmostChanged(NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
         updateVisibility()
+
+        // First launch: Hotaru waves hello once.
+        if !settings.greeted && settings.theme == .hotaru && settings.enabled {
+            Timer.scheduledTimer(withTimeInterval: 0.8, repeats: false) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.overlay.greet()
+                    self?.store.settings.greeted = true
+                }
+            }
+        }
+        // Demo and testing: `--preview-keycaps <bundle-id> [delay-seconds]` plays the keycap and
+        // Shortcut Subtitles preview for that app's dictionary, without Input Monitoring.
+        let args = CommandLine.arguments
+        if let i = args.firstIndex(of: "--preview-keycaps"), i + 1 < args.count {
+            let app = args[i + 1]
+            let delay = i + 2 < args.count ? Double(args[i + 2]) ?? 2 : 2
+            Log.app.notice("preview keycaps for \(app, privacy: .public) in \(delay)s")
+            Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+                MainActor.assumeIsolated { self?.keycaps.preview(bundleID: app) }
+            }
+        }
     }
 
     // MARK: Input
@@ -324,6 +345,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(item("Set up Input Monitoring…", indent: 1) { $0.showOnboarding() })
         }
         menu.addItem(item("Preview keycaps", indent: 1) { $0.keycaps.preview() })
+        let subs = NSMenuItem(title: "Preview subtitles for", action: nil, keyEquivalent: "")
+        subs.indentationLevel = 1
+        let subsMenu = NSMenu()
+        for (id, app) in ShortcutSubtitles.apps.sorted(by: { $0.value.name < $1.value.name }) {
+            subsMenu.addItem(item(app.name) { $0.keycaps.preview(bundleID: id) })
+        }
+        subs.submenu = subsMenu
+        menu.addItem(subs)
+        menu.addItem(item("Shortcut Subtitles", checked: s.keycapSubtitles, indent: 1) { $0.store.settings.keycapSubtitles.toggle() })
         menu.addItem(item(keycaps.isPositioning ? "Done moving keycaps" : "Move keycaps…", indent: 1) { d in
             if d.keycaps.isPositioning { d.keycaps.endPositioning() } else { d.keycaps.beginPositioning() }
         })

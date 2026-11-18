@@ -115,6 +115,8 @@ public struct KeycapEntry: Equatable, Sendable {
     public var text: String
     public var count = 1
     public var lastTime: Double
+    /// What the shortcut does in the app it was pressed in (Shortcut Subtitles), if known.
+    public var subtitle: String?
 
     public func display(showCount: Bool) -> String {
         if case .typing = kind { return text }
@@ -153,7 +155,7 @@ public struct KeycapFeed: Sendable {
 
     /// Records a key press. Returns true when the HUD changed.
     @discardableResult
-    public mutating func record(_ stroke: KeyStroke, time: Double, isRepeat: Bool = false) -> Bool {
+    public mutating func record(_ stroke: KeyStroke, time: Double, isRepeat: Bool = false, subtitle: String? = nil) -> Bool {
         guard accepts(stroke) else { return false }
         prune(now: time)
 
@@ -175,7 +177,7 @@ public struct KeycapFeed: Sendable {
             entries[entries.count - 1].lastTime = time
             return true
         }
-        append(KeycapEntry(kind: .stroke(stroke), text: stroke.label, lastTime: time))
+        append(KeycapEntry(kind: .stroke(stroke), text: stroke.label, lastTime: time, subtitle: subtitle))
         return true
     }
 
@@ -189,6 +191,12 @@ public struct KeycapFeed: Sendable {
     }
 
     public mutating func clear() { entries.removeAll() }
+
+    /// The subtitle to show: the newest entry's, with its repeat count ("Add Selection ×3").
+    public var currentSubtitle: String? {
+        guard let last = entries.last, let subtitle = last.subtitle else { return nil }
+        return last.count > 1 ? "\(subtitle) ×\(last.count)" : subtitle
+    }
 
     private mutating func append(_ e: KeycapEntry) {
         entries.append(e)
