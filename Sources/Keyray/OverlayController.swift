@@ -3,7 +3,8 @@ import KeyrayCore
 
 /// Draws the cursor ring, click ripples, laser trail and ink on one overlay window per display.
 /// Everything is Core Animation layers, so moving the cursor only moves a layer and ripples
-/// and fades run in the render server; timers run only while something is animating by hand.
+/// and fades run in the render server. The laser trail is redrawn once per display frame by a
+/// display link, which runs only while the trail is visible.
 @MainActor
 final class OverlayController {
     private(set) var windows: [OverlayWindow] = []
@@ -20,12 +21,15 @@ final class OverlayController {
     private let halo = Skin.makeLanternHalo()
     private var companionAnim = CompanionAnimator()
     private var companionTimer: Timer?
-    private var companionKey = ""
+    /// The pose and facing on screen, so a move that changes neither touches no layer.
+    private var companionShown: (pose: CompanionPose, facingLeft: Bool)?
     private var lastCursor: CGPoint?
     private var trail: LaserTrail
     private var trailWindow: OverlayWindow?
-    private var laserTimer: Timer?
+    private lazy var frameClock = FrameClock { [weak self] link in self?.frame(link) }
     private var cursorWindow: OverlayWindow?
+    /// The pointer position last drawn, in global coordinates.
+    private var lastPointer: NSPoint?
 
     private var lastMove = CACurrentMediaTime()
     private var idleHidden = false
@@ -44,6 +48,7 @@ final class OverlayController {
             guard laserOn != oldValue else { return }
             trail.clear()
             laserRibbon.path = nil
+            laserRibbon.shadowPath = nil
             if settings.theme == .hotaru, let p = lastCursor {
                 CATransaction.begin()
                 CATransaction.setDisableActions(true)
@@ -71,7 +76,8 @@ final class OverlayController {
         self.settings = settings
         trail = LaserTrail(duration: settings.laserTrailSeconds, maxWidth: settings.laserWidth)
         for layer in [ring, laserDot, laserRibbon, companion] {
-            layer.actions = ["position": NSNull(), "path": NSNull(), "bounds": NSNull(), "contents": NSNull(), "transform": NSNull()]
+            layer.actions = ["position": NSNull(), "path": NSNull(), "shadowPath": NSNull(), "bounds": NSNull(),
+                             "contents": NSNull(), "transform": NSNull()]
             layer.opacity = 0
         }
         laserRibbon.opacity = 1
@@ -96,7 +102,7 @@ final class OverlayController {
         trail.maxWidth = s.laserWidth * (s.theme == .keynoteGlow ? 1.8 : 1)
         Skin.buildRing(into: ring, settings: s)
         Skin.styleLaser(tip: laserDot, ribbon: laserRibbon, settings: s)
-        companionKey = ""
+        companionShown = nil
         refreshCompanion()
 
         for border in inkBorders { border.borderColor = s.style.pen.cg(alpha: 0.45) }
@@ -124,6 +130,7 @@ final class OverlayController {
         }
         cursorWindow = nil
         trailWindow = nil
+        lastPointer = nil
         trail.clear()
         Log.overlay.notice("overlay windows: \(self.windows.count) display(s)")
         if wasVisible {
@@ -141,6 +148,7 @@ final class OverlayController {
             for w in windows { w.orderFrontRegardless() }
             lastMove = CACurrentMediaTime()
             idleHidden = false
+            lastPointer = NSEvent.mouseLocation
             moveCursorLayers(to: NSEvent.mouseLocation)
             updateCursorLayers(animated: false)
             scheduleIdleCheck()
@@ -148,10 +156,10 @@ final class OverlayController {
             for w in windows { w.orderOut(nil) }
             idleTimer?.invalidate()
             idleTimer = nil
-            laserTimer?.invalidate()
-            laserTimer = nil
+            frameClock.stop()
             trail.clear()
             laserRibbon.path = nil
+            laserRibbon.shadowPath = nil
             finishStroke()
         }
         Log.overlay.notice("overlays \(show ? "shown" : "hidden", privacy: .public)")
@@ -175,7 +183,10 @@ final class OverlayController {
         // the window server for the cursor position on every move.
         let global = event.window.map { $0.convertPoint(toScreen: event.locationInWindow) } ?? event.locationInWindow
         switch event.type {
-        case .mouseMoved, .rightMouseDragged, .otherMouseDragged:
+        case .mouseMoved:
+            // A move over the click-through overlay has no window to convert from.
+            moved(to: event.window == nil ? NSEvent.mouseLocation : global)
+        case .rightMouseDragged, .otherMouseDragged:
             moved(to: global)
         case .leftMouseDragged:
             moved(to: global)
@@ -203,6 +214,10 @@ final class OverlayController {
     }
 
     private func moved(to global: NSPoint) {
+        // The same move can arrive twice (from the global monitor and as an event on the overlay
+        // itself); a position already drawn needs no work.
+        guard global != lastPointer else { return }
+        lastPointer = global
         lastMove = CACurrentMediaTime()
         moveCursorLayers(to: global)
         if idleHidden {
@@ -217,9 +232,9 @@ final class OverlayController {
                 w.root.addSublayer(laserRibbon)
             }
             let p = w.local(global)
-            // The trail is redrawn once per frame by the laser timer, not once per mouse event.
+            // The trail is redrawn once per display frame, not once per mouse event.
             trail.add(Point(p.x, p.y), time: lastMove)
-            startLaserTimer()
+            startFrameClock()
         }
     }
 
@@ -409,9 +424,9 @@ final class OverlayController {
         guard settings.theme == .hotaru else { return }
         let now = CACurrentMediaTime()
         let pose = companionAnim.pose(at: now, laser: laserOn, idle: idleHidden)
-        let key = "\(pose.rawValue)-\(companionAnim.facingLeft)"
-        if key != companionKey {
-            companionKey = key
+        let facingLeft = companionAnim.facingLeft
+        if companionShown?.pose != pose || companionShown?.facingLeft != facingLeft {
+            companionShown = (pose, facingLeft)
             currentPose = pose
             let l = Skin.lanternInBox(pose)
             halo.position = CGPoint(x: companionAnim.facingLeft ? Skin.companionSize - l.x : l.x, y: l.y)
@@ -435,35 +450,37 @@ final class OverlayController {
 
     // MARK: Laser trail
 
-    private func redrawTrail() {
-        let poly = trail.ribbon(now: CACurrentMediaTime())
+    private func startFrameClock() {
+        if let view = (trailWindow ?? cursorWindow)?.contentView { frameClock.start(on: view) }
+    }
+
+    /// One display frame of the laser: the trail as it should look when the frame reaches the
+    /// screen (`targetTimestamp`). The clock stops once the trail has faded.
+    private func frame(_ link: CADisplayLink) {
+        let signpost = Log.signposter.beginInterval("Laser frame")
+        defer { Log.signposter.endInterval("Laser frame", signpost) }
+        let now = link.targetTimestamp
+        let alive = trail.prune(now: now)
+        redrawTrail(now: now)
+        if !alive { frameClock.stop() }
+    }
+
+    private func redrawTrail(now: Double) {
+        let poly = trail.ribbon(now: now)
         guard poly.count > 2 else {
-            laserRibbon.path = nil
+            if laserRibbon.path != nil {
+                laserRibbon.path = nil
+                laserRibbon.shadowPath = nil
+            }
             return
         }
         let path = CGMutablePath()
         path.addLines(between: poly.map { CGPoint(x: $0.x, y: $0.y) })
         path.closeSubpath()
         laserRibbon.path = path
-    }
-
-    private func startLaserTimer() {
-        guard laserTimer == nil else { return }
-        let t = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                let signpost = Log.signposter.beginInterval("Laser frame")
-                defer { Log.signposter.endInterval("Laser frame", signpost) }
-                let alive = self.trail.prune(now: CACurrentMediaTime())
-                self.redrawTrail()
-                if !alive {
-                    self.laserTimer?.invalidate()
-                    self.laserTimer = nil
-                }
-            }
-        }
-        RunLoop.main.add(t, forMode: .common)
-        laserTimer = t
+        // The ribbon is one filled shape, so its outline is exactly the glow's shape; with it the
+        // render server draws the glow directly instead of an offscreen pass over the layer.
+        if laserRibbon.shadowOpacity > 0 { laserRibbon.shadowPath = path }
     }
 
     // MARK: Ink
@@ -497,6 +514,7 @@ final class OverlayController {
         stroke = nil
         strokeWindow = nil
         strokes.append(s)
+        s.freeze()
         let fade = InkFade(hold: settings.inkHoldSeconds, fade: settings.inkFadeSeconds)
         let a = CABasicAnimation(keyPath: "opacity")
         a.fromValue = 1
@@ -595,6 +613,22 @@ final class InkStroke {
         if let last = points.last, hypot(p.x - last.x, p.y - last.y) < 1 { return }
         points.append(p)
         redraw()
+    }
+
+    /// A finished stroke no longer changes: cache it as a bitmap for its hold and fade, so its glow
+    /// is not re-rendered every frame.
+    func freeze() {
+        guard let path = layer.path else { return }
+        let margin = layer.lineWidth + layer.shadowRadius + 4
+        let box = path.boundingBoxOfPath.insetBy(dx: -margin, dy: -margin)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        // Bounds in the same coordinates as the path, centered on the position: nothing moves.
+        layer.bounds = box
+        layer.position = CGPoint(x: box.midX, y: box.midY)
+        layer.shouldRasterize = true
+        layer.rasterizationScale = Skin.backingScale
+        CATransaction.commit()
     }
 
     private func redraw() {

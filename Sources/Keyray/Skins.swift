@@ -134,6 +134,7 @@ enum Skin {
             container.addSublayer(edge)
             container.addSublayer(body)
         }
+        rasterize(container, extent: d / 2 + s.ringLineWidth + 16)
     }
 
     /// Closed outline of a tapered brush circle (about 330°), as a fillable path.
@@ -204,6 +205,7 @@ enum Skin {
         }
         layer.position = point
         layer.opacity = 0
+        rasterize(layer, extent: d / 2 + width + 12)
 
         let scale = CABasicAnimation(keyPath: "transform.scale")
         scale.fromValue = timing.startScale
@@ -295,6 +297,7 @@ enum Skin {
         group.addSublayer(under)
         group.addSublayer(neon)
         group.addSublayer(label)
+        rasterize(group, extent: h + 30)
 
         let scale = CAKeyframeAnimation(keyPath: "transform.scale")
         scale.values = [1.9, 1, 1]
@@ -341,6 +344,8 @@ enum Skin {
         glyph.contentsScale = 2
         glyph.frame = CGRect(x: 0, y: (size.height - 20) / 2, width: size.width, height: 20)
         seal.addSublayer(glyph)
+        seal.shouldRasterize = true
+        seal.rasterizationScale = backingScale
 
         let n = 12
         let times = (0...n).map { Double($0) / Double(n) * t.duration }
@@ -437,6 +442,7 @@ enum Skin {
             container.addSublayer(light)
             ribbon.fillColor = style.laser.cg(alpha: 0.32)
         }
+        rasterize(container, extent: dot * 1.6 + 14)
     }
 
     // MARK: Companion
@@ -705,6 +711,18 @@ enum Skin {
         l.actions = ["position": NSNull(), "path": NSNull(), "bounds": NSNull()]
         return l
     }
+
+    /// Static artwork cached as a bitmap: Core Animation composites the cached image instead of
+    /// re-rendering the shapes and their glow (an offscreen shadow pass) on every frame the layer
+    /// moves, scales or fades. `extent` is the half-size of the square, centered on the layer's
+    /// position, that the artwork and its glow fit in.
+    static func rasterize(_ layer: CALayer, extent: CGFloat) {
+        layer.bounds = CGRect(x: -extent, y: -extent, width: extent * 2, height: extent * 2)
+        layer.shouldRasterize = true
+        layer.rasterizationScale = backingScale
+    }
+
+    static var backingScale: CGFloat { NSScreen.screens.map(\.backingScaleFactor).max() ?? 2 }
 
     private static func glow(_ layer: CALayer, _ color: RGBA, radius: CGFloat) {
         layer.shadowColor = color.cg()
