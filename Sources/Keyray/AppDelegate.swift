@@ -107,20 +107,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: Input
 
-    /// Mouse position and clicks from every app. NSEvent's global monitor needs no permission for
-    /// mouse events (only key events require Accessibility), so this works in the sandbox as is.
+    /// Clicks and drags from every app (global monitor), and events on our own overlay (local
+    /// monitor). NSEvent's global monitor needs no permission for mouse events (only key events
+    /// require Accessibility), so this works in the sandbox as is.
+    ///
+    /// Plain moves come only through the local monitor: the overlay covers every display, so the
+    /// window server sends each move to it (with no `window`, and the window number of the app
+    /// underneath) even though it is click-through. A global mouseMoved monitor would deliver every
+    /// move a second time.
     private func installMouseMonitors() {
         guard monitors.isEmpty else { return }
-        let mask: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDown, .leftMouseUp, .leftMouseDragged,
+        let mask: NSEvent.EventTypeMask = [.leftMouseDown, .leftMouseUp, .leftMouseDragged,
                                            .rightMouseDown, .rightMouseUp, .rightMouseDragged,
                                            .otherMouseDown, .otherMouseUp, .otherMouseDragged]
         if let global = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: { [weak self] e in
             MainActor.assumeIsolated { self?.overlay.handle(e) }
         }) { monitors.append(global) }
-        // Our own overlay windows while ink mode holds the mouse.
-        if let local = NSEvent.addLocalMonitorForEvents(matching: mask, handler: { [weak self] e in
+        // Moves over the overlay, and everything on it while ink mode holds the mouse. Our
+        // Settings and onboarding windows always come with a `window`.
+        if let local = NSEvent.addLocalMonitorForEvents(matching: mask.union(.mouseMoved), handler: { [weak self] e in
             MainActor.assumeIsolated {
-                if e.window is OverlayWindow { self?.overlay.handle(e) }
+                if e.window is OverlayWindow || (e.type == .mouseMoved && e.window == nil) { self?.overlay.handle(e) }
             }
             return e
         }) { monitors.append(local) }

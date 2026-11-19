@@ -126,6 +126,8 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
     }
 
     private func render() {
+        let signpost = Log.signposter.beginInterval("Keycaps render")
+        defer { Log.signposter.endInterval("Keycaps render", signpost) }
         let texts: [String]
         if isPositioning {
             texts = ["Drag to move", "⌃⌥⌘K"]
