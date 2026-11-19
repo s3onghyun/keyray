@@ -165,6 +165,12 @@ final class OverlayController {
     /// monitor (our own overlay while ink mode holds the mouse).
     func handle(_ event: NSEvent) {
         guard visible else { return }
+        let signpost = Log.signposter.beginInterval("Pointer", id: Log.signposter.makeSignpostID(),
+                                                    "type=\(event.type.rawValue) age=\((CACurrentMediaTime() - event.timestamp) * 1000, format: .fixed(precision: 2))ms")
+        defer {
+            Log.signposter.endInterval("Pointer", signpost,
+                                       "age=\((CACurrentMediaTime() - event.timestamp) * 1000, format: .fixed(precision: 2))ms")
+        }
         // Global-monitor events carry screen coordinates already; reading the event avoids asking
         // the window server for the cursor position on every move.
         let global = event.window.map { $0.convertPoint(toScreen: event.locationInWindow) } ?? event.locationInWindow
@@ -446,6 +452,8 @@ final class OverlayController {
         let t = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
+                let signpost = Log.signposter.beginInterval("Laser frame")
+                defer { Log.signposter.endInterval("Laser frame", signpost) }
                 let alive = self.trail.prune(now: CACurrentMediaTime())
                 self.redrawTrail()
                 if !alive {
