@@ -3,7 +3,9 @@
 # read access to files the user picks, signed with the Hardened Runtime (--options runtime) so
 # both are really active.
 #
-#   SIGN_IDENTITY      codesign identity (default "-", ad hoc)
+#   SIGN_IDENTITY      codesign identity (default "-", ad hoc); a real identity also gets a secure
+#                      timestamp (notarization needs one). scripts/release.sh sets it.
+#   SIGN_KEYCHAIN      keychain that holds SIGN_IDENTITY (default: the search list)
 #   BUNDLE_IDENTIFIER  bundle id (default com.s3onghyun.keyray)
 #   ARCHS              arm64 (default), x86_64 or universal
 #   SWIFT_BUILD_FLAGS  extra `swift build` flags, e.g. "--build-system native"
@@ -77,8 +79,10 @@ cat > "$app/Contents/Info.plist" <<PLIST
 PLIST
 plutil -lint "$app/Contents/Info.plist" >/dev/null
 
+timestamp=--timestamp
+[ "$sign_identity" = - ] && timestamp=--timestamp=none
 xattr -cr "$app"
-codesign --force --timestamp=none --options runtime --sign "$sign_identity" \
-  --entitlements "$root/Resources/Keyray.entitlements" "$app"
+codesign --force "$timestamp" --options runtime --sign "$sign_identity" \
+  ${SIGN_KEYCHAIN:+--keychain "$SIGN_KEYCHAIN"} --entitlements "$root/Resources/Keyray.entitlements" "$app"
 codesign --verify --strict "$app"
 printf '%s\n' "$app"

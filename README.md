@@ -165,6 +165,17 @@ keybindings import. Check the result with:
 codesign -dvv --entitlements - build/Keyray.app   # flags=0x10002(adhoc,runtime), app-sandbox
 ```
 
+An ad hoc build has a new code identity on every rebuild, so macOS drops its Input Monitoring
+grant. For an install that keeps the grant across updates, `scripts/release.sh` signs with
+Developer ID (secure timestamp, hardened runtime), notarizes with `notarytool` using an App Store
+Connect API key, staples the ticket and checks `spctl` reports `source=Notarized Developer ID`:
+
+```sh
+NOTARY_ISSUER=<issuer id> scripts/release.sh   # -> build/Keyray.app, build/Keyray-<version>.zip
+```
+
+See the script header for the key, identity and keychain defaults.
+
 ## Tests
 
 The pure logic (settings decoding and clamping, ripple, ink and idle timing, the laser trail,
