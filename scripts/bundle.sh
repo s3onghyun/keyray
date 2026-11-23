@@ -47,6 +47,7 @@ if [ "$#" -eq 1 ]; then
 else
   lipo -create "$@" -output "$app/Contents/MacOS/Keyray"
 fi
+cp "$root/Resources/AppIcon.icns" "$app/Contents/Resources/AppIcon.icns"
 
 sdk=${SDKROOT:-$(xcrun --sdk macosx --show-sdk-path)}
 sdk_version=$(plutil -extract ProductVersion raw "$sdk/System/Library/CoreServices/SystemVersion.plist")
@@ -61,6 +62,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
   <key>CFBundleName</key><string>Keyray</string>
   <key>CFBundleDisplayName</key><string>Keyray</string>
   <key>CFBundleExecutable</key><string>Keyray</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundleDevelopmentRegion</key><string>en</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$version</string>
