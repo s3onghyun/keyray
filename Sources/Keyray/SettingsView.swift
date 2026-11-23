@@ -59,6 +59,12 @@ struct SettingsView: View {
                 Toggle("Count repeats (⌘Z ×3)", isOn: $store.settings.keycapShowRepeatCount)
                 Toggle("Hide this app's own shortcuts", isOn: $store.settings.keycapHideActivationKeys)
                 slider("Stay on screen", $store.settings.keycapLingerSeconds, AppSettings.keycapLingerRange, "%.1f s")
+                slider("Size", $store.settings.keycapScale, AppSettings.keycapScaleRange, "%.0f%%", scale: 100)
+                slider("Subtitle size", $store.settings.keycapSubtitleScale, AppSettings.keycapScaleRange, "%.0f%%", scale: 100)
+                Picker("Position", selection: placement) {
+                    ForEach(KeycapPlacement.allCases, id: \.self) { Text($0.title).tag(KeycapPlacement?.some($0)) }
+                    if placement.wrappedValue == nil { Text("Custom (dragged)").tag(KeycapPlacement?.none) }
+                }
             }
             Section("Privacy prompts") {
                 Toggle("Hide overlays while System Settings or a security prompt is in front",
@@ -87,9 +93,31 @@ struct SettingsView: View {
         }
     }
 
+    /// The preset matching the saved position; nil after "Move keycaps" put them elsewhere.
+    private var placement: Binding<KeycapPlacement?> {
+        Binding(get: { KeycapPlacement(position: store.settings.keycapPosition) },
+                set: { if let p = $0 { store.settings.keycapPosition = p.position } })
+    }
+
     private func color(_ binding: Binding<RGBA>) -> Binding<Color> {
         Binding(get: { Color(nsColor: binding.wrappedValue.nsColor) },
                 set: { binding.wrappedValue = RGBA(NSColor($0)) })
+    }
+}
+
+extension KeycapPlacement {
+    var title: String {
+        switch self {
+        case .topLeft: "Top left"
+        case .top: "Top center"
+        case .topRight: "Top right"
+        case .left: "Middle left"
+        case .center: "Center"
+        case .right: "Middle right"
+        case .bottomLeft: "Bottom left"
+        case .bottom: "Bottom center"
+        case .bottomRight: "Bottom right"
+        }
     }
 }
 

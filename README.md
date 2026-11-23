@@ -157,7 +157,8 @@ open build/Keyray.app
 ```
 
 `scripts/bundle.sh` builds the release binary, writes `Info.plist` (`LSUIElement`, so there is no
-Dock icon), and signs ad hoc with `--options runtime` and `Resources/Keyray.entitlements`:
+Dock icon), copies the app icon (`Resources/AppIcon.icns`, made from the hand-drawn
+`Resources/AppIcon.svg` by `scripts/icon.sh`), and signs ad hoc with `--options runtime` and `Resources/Keyray.entitlements`:
 `com.apple.security.app-sandbox`, plus `com.apple.security.files.user-selected.read-only` for the
 keybindings import. Check the result with:
 

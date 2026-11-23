@@ -95,6 +95,10 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var keycapShowRepeatCount = true
     public var keycapHideActivationKeys = true
     public var keycapLingerSeconds = 1.6
+    /// Scales the keycap text and padding.
+    public var keycapScale = 1.0
+    /// Scales the Shortcut Subtitle text.
+    public var keycapSubtitleScale = 1.0
     /// Shortcut Subtitles: say what a shortcut does in the frontmost app, under the keycaps.
     public var keycapSubtitles = true
     /// The user's own VS Code keybindings.json, if imported; it names shortcuts in VS Code.
@@ -145,6 +149,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
         keycapShowRepeatCount = v(.keycapShowRepeatCount, d.keycapShowRepeatCount)
         keycapHideActivationKeys = v(.keycapHideActivationKeys, d.keycapHideActivationKeys)
         keycapLingerSeconds = v(.keycapLingerSeconds, d.keycapLingerSeconds)
+        keycapScale = v(.keycapScale, d.keycapScale)
+        keycapSubtitleScale = v(.keycapSubtitleScale, d.keycapSubtitleScale)
         laserColor = v(.laserColor, d.laserColor)
         laserTrailSeconds = v(.laserTrailSeconds, d.laserTrailSeconds)
         laserWidth = v(.laserWidth, d.laserWidth)
@@ -163,6 +169,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public static let rippleDurationRange = 0.15...1.5
     public static let rippleDiameterRange = 24.0...200.0
     public static let keycapLingerRange = 0.5...6.0
+    public static let keycapScaleRange = 0.6...3.0
     public static let laserTrailRange = 0.1...2.0
     public static let laserWidthRange = 2.0...30.0
     public static let inkHoldRange = 0.0...30.0
@@ -184,6 +191,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
         s.rippleDiameter = rippleDiameter.clamped(to: Self.rippleDiameterRange)
         s.keycapPosition = UnitPoint(x: keycapPosition.x.clamped(0, 1), y: keycapPosition.y.clamped(0, 1))
         s.keycapLingerSeconds = keycapLingerSeconds.clamped(to: Self.keycapLingerRange)
+        s.keycapScale = keycapScale.clamped(to: Self.keycapScaleRange)
+        s.keycapSubtitleScale = keycapSubtitleScale.clamped(to: Self.keycapScaleRange)
         s.laserColor = laserColor.clamped
         s.laserTrailSeconds = laserTrailSeconds.clamped(to: Self.laserTrailRange)
         s.laserWidth = laserWidth.clamped(to: Self.laserWidthRange)
@@ -213,6 +222,23 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public static func decoded(from data: Data?) -> AppSettings {
         guard let data, let s = try? JSONDecoder().decode(AppSettings.self, from: data) else { return .default }
         return s.normalized
+    }
+}
+
+/// Preset spots for the keycaps, as a 3 × 3 grid of the screen's visible frame. They set
+/// `keycapPosition`, so dragging still places the keycaps anywhere.
+public enum KeycapPlacement: String, CaseIterable, Sendable {
+    case topLeft, top, topRight, left, center, right, bottomLeft, bottom, bottomRight
+
+    public var position: UnitPoint {
+        let i = Self.allCases.firstIndex(of: self)!
+        return UnitPoint(x: [0.15, 0.5, 0.85][i % 3], y: [0.88, 0.5, 0.12][i / 3])
+    }
+
+    /// The preset at `position`, or nil for a dragged spot.
+    public init?(position: UnitPoint) {
+        guard let p = Self.allCases.first(where: { $0.position == position }) else { return nil }
+        self = p
     }
 }
 

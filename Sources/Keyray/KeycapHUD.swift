@@ -28,8 +28,6 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
         configureAsOverlay(window)
         window.delegate = self
         stack.orientation = .horizontal
-        stack.spacing = 8
-        stack.edgeInsets = NSEdgeInsets(top: 10, left: 12, bottom: 10, right: 12)
         column.orientation = .vertical
         column.alignment = .centerX
         column.spacing = 2
@@ -49,11 +47,17 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
     }
 
     func apply(_ s: AppSettings) {
+        let relayout = s.keycapScale != settings.keycapScale || s.keycapSubtitleScale != settings.keycapSubtitleScale
+            || s.theme != settings.theme
+            || (s.keycapPosition != settings.keycapPosition && !isPositioning) // a drag already moved the window
         settings = s
+        let k = s.keycapScale
+        stack.spacing = 8 * k
+        stack.edgeInsets = NSEdgeInsets(top: 10 * k, left: 12 * k, bottom: 10 * k, right: 12 * k)
         feed.mode = s.keycapMode
         feed.linger = s.keycapLingerSeconds
         feed.hiddenStrokes = s.keycapHideActivationKeys ? AppShortcut.activationStrokes : []
-        if s.keycapMode == .off && !isPositioning { clear() }
+        if s.keycapMode == .off && !isPositioning { clear() } else if relayout { render() }
     }
 
     func setSuppressed(_ value: Bool) {
@@ -180,6 +184,7 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
     /// (a caption under the keys, not a speech bubble: the character sheet keeps Hotaru wordless),
     /// a terminal comment for Cyberpunk, a plain caption otherwise.
     private func subtitleView(_ text: String) -> NSView {
+        let k = settings.keycapSubtitleScale
         let label = NSTextField(labelWithString: text)
         let box = NSView()
         box.wantsLayer = true
@@ -188,20 +193,20 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
         switch settings.theme {
         case .cyberpunk:
             label.stringValue = "// " + text.lowercased()
-            label.font = .monospacedSystemFont(ofSize: 18, weight: .medium)
+            label.font = .monospacedSystemFont(ofSize: 18 * k, weight: .medium)
             label.textColor = RGBA(hex: CyberPalette.acid).nsColor
             box.layer?.backgroundColor = RGBA(hex: CyberPalette.night, alpha: 0.9).cg()
             box.layer?.cornerRadius = 3
         case .hotaru:
-            label.font = .systemFont(ofSize: 19, weight: .semibold)
+            label.font = .systemFont(ofSize: 19 * k, weight: .semibold)
             label.textColor = RGBA(hex: HotaruPalette.lanternCore).nsColor
             box.layer?.backgroundColor = RGBA(hex: HotaruPalette.nightInk, alpha: 0.88).cg()
             box.layer?.cornerRadius = 12
             // A small lit lantern dot marks it as Hotaru's caption.
             let dot = CALayer()
             dot.backgroundColor = RGBA(hex: HotaruPalette.lanternCore).cg()
-            dot.frame = CGRect(x: 11, y: 11, width: 8, height: 8)
-            dot.cornerRadius = 4
+            dot.frame = CGRect(x: 11 * k, y: 11 * k, width: 8 * k, height: 8 * k)
+            dot.cornerRadius = 4 * k
             dot.shadowColor = RGBA(hex: HotaruPalette.lanternGlow).cg()
             dot.shadowOpacity = 1
             dot.shadowRadius = 4
@@ -209,17 +214,17 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
             box.layer?.addSublayer(dot)
             leading = 26
         default:
-            label.font = .systemFont(ofSize: 18, weight: .medium)
+            label.font = .systemFont(ofSize: 18 * k, weight: .medium)
             label.textColor = .white
             box.layer?.backgroundColor = NSColor(white: 0.08, alpha: 0.75).cgColor
         }
         box.addSubview(label)
         label.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: leading),
-            label.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -12),
-            label.topAnchor.constraint(equalTo: box.topAnchor, constant: 5),
-            label.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -5),
+            label.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: leading * k),
+            label.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -12 * k),
+            label.topAnchor.constraint(equalTo: box.topAnchor, constant: 5 * k),
+            label.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -5 * k),
         ])
         return box
     }
@@ -228,17 +233,18 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
     /// hanji tag with a seal mark (Brush & Ink) or frosted glass (Keynote Glow).
     private func cap(_ text: String, dashed: Bool) -> NSView {
         let style = settings.style
+        let k = settings.keycapScale
         let label = NSTextField(labelWithString: text)
         label.textColor = style.keycapText.nsColor
         switch settings.theme {
         case .hotaru:
-            label.font = .systemFont(ofSize: 30, weight: .bold)
+            label.font = .systemFont(ofSize: 30 * k, weight: .bold)
         case .cyberpunk:
-            label.font = .monospacedSystemFont(ofSize: 28, weight: .semibold)
+            label.font = .monospacedSystemFont(ofSize: 28 * k, weight: .semibold)
         case .brushInk:
-            label.font = NSFont(name: "AppleMyungjo", size: 30) ?? .systemFont(ofSize: 30)
+            label.font = NSFont(name: "AppleMyungjo", size: 30 * k) ?? .systemFont(ofSize: 30 * k)
         case .minimal, .keynoteGlow:
-            label.font = .systemFont(ofSize: 30, weight: .semibold)
+            label.font = .systemFont(ofSize: 30 * k, weight: .semibold)
         }
         let box: NSView
         if settings.theme == .keynoteGlow {
@@ -252,7 +258,7 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
         }
         box.wantsLayer = true
         box.layer?.backgroundColor = settings.theme == .keynoteGlow ? nil : style.keycapBackground.nsColor.cgColor
-        box.layer?.cornerRadius = style.keycapCornerRadius
+        box.layer?.cornerRadius = style.keycapCornerRadius * k
         box.layer?.masksToBounds = settings.theme == .keynoteGlow
         box.layer?.borderWidth = dashed ? 2 : 1
         box.layer?.borderColor = dashed ? NSColor(white: 1, alpha: 0.8).cgColor : style.keycapBorder.nsColor.cgColor
@@ -260,15 +266,15 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
             // Terminal accents: a magenta prompt mark and faint scanlines.
             let prompt = CALayer()
             prompt.backgroundColor = RGBA(hex: CyberPalette.magenta).cg()
-            prompt.frame = CGRect(x: 5, y: 7, width: 3, height: 12)
+            prompt.frame = CGRect(x: 5 * k, y: 7 * k, width: 3 * k, height: 12 * k)
             box.layer?.addSublayer(prompt)
             let lines = CAReplicatorLayer()
-            lines.frame = CGRect(x: 0, y: 0, width: 400, height: 60)
-            lines.instanceCount = 20
+            lines.frame = CGRect(x: 0, y: 0, width: 400 * k, height: 60 * k)
+            lines.instanceCount = Int((20 * k).rounded(.up))
             lines.instanceTransform = CATransform3DMakeTranslation(0, 3, 0)
             let line = CALayer()
             line.backgroundColor = RGBA(hex: CyberPalette.cyan, alpha: 0.07).cg()
-            line.frame = CGRect(x: 0, y: 0, width: 400, height: 1)
+            line.frame = CGRect(x: 0, y: 0, width: 400 * k, height: 1)
             lines.addSublayer(line)
             box.layer?.addSublayer(lines)
             box.layer?.masksToBounds = true
@@ -276,8 +282,8 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
         if settings.theme == .hotaru {
             let light = CALayer()
             light.backgroundColor = RGBA(hex: HotaruPalette.lanternCore).cg()
-            light.frame = CGRect(x: 6, y: 6, width: 6, height: 6)
-            light.cornerRadius = 3
+            light.frame = CGRect(x: 6 * k, y: 6 * k, width: 6 * k, height: 6 * k)
+            light.cornerRadius = 3 * k
             light.shadowColor = RGBA(hex: HotaruPalette.lanternGlow).cg()
             light.shadowOpacity = 1
             light.shadowRadius = 3
@@ -287,17 +293,17 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
         if settings.theme == .brushInk {
             let seal = CALayer()
             seal.backgroundColor = RGBA(hex: 0xB8312F, alpha: 0.9).cg()
-            seal.frame = CGRect(x: 4, y: 4, width: 7, height: 7)
+            seal.frame = CGRect(x: 4 * k, y: 4 * k, width: 7 * k, height: 7 * k)
             seal.cornerRadius = 1
             box.layer?.addSublayer(seal)
         }
         box.addSubview(label)
         label.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 16),
-            label.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -16),
-            label.topAnchor.constraint(equalTo: box.topAnchor, constant: 8),
-            label.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -8),
+            label.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 16 * k),
+            label.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -16 * k),
+            label.topAnchor.constraint(equalTo: box.topAnchor, constant: 8 * k),
+            label.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -8 * k),
         ])
         return box
     }

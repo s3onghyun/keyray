@@ -527,3 +527,18 @@ private func vscode(_ label: String, _ imported: ImportedKeybindings?) -> String
     #expect(AppSettings.decoded(from: try s.encoded()) == s)
     #expect(AppSettings.decoded(from: try AppSettings().encoded()).vscodeKeybindings == nil)
 }
+
+@Test func keycapSizesDefaultAndClamp() {
+    #expect(AppSettings().keycapScale == 1 && AppSettings().keycapSubtitleScale == 1)
+    let s = AppSettings.decoded(from: Data(#"{"keycapScale": 9, "keycapSubtitleScale": 0.1}"#.utf8))
+    #expect(s.keycapScale == AppSettings.keycapScaleRange.upperBound)
+    #expect(s.keycapSubtitleScale == AppSettings.keycapScaleRange.lowerBound)
+    #expect(AppSettings.decoded(from: try! s.encoded()) == s)
+}
+
+@Test func keycapPlacementPresetsRoundTrip() {
+    #expect(KeycapPlacement(position: AppSettings().keycapPosition) == .bottom)
+    for p in KeycapPlacement.allCases { #expect(KeycapPlacement(position: p.position) == p) }
+    #expect(KeycapPlacement.topLeft.position == UnitPoint(x: 0.15, y: 0.88))
+    #expect(KeycapPlacement(position: UnitPoint(x: 0.3, y: 0.4)) == nil)
+}
