@@ -21,6 +21,7 @@ final class OverlayController {
     private let halo = Skin.makeLanternHalo()
     private var companionAnim = CompanionAnimator()
     private var companionTimer: Timer?
+    private var sources = PointerSources()
     /// The pose and facing on screen, so a move that changes neither touches no layer.
     private var companionShown: (pose: CompanionPose, facingLeft: Bool)?
     private var lastCursor: CGPoint?
@@ -171,8 +172,16 @@ final class OverlayController {
 
     /// Handles one mouse event from the global monitor (other apps' windows) or the local
     /// monitor (our own overlay while ink mode holds the mouse).
-    func handle(_ event: NSEvent) {
+    func handle(_ event: NSEvent, fromGlobalMonitor: Bool = false) {
         guard visible else { return }
+        if event.type == .mouseMoved {
+            let now = CACurrentMediaTime()
+            if fromGlobalMonitor {
+                guard sources.acceptsGlobalMove(at: now) else { return }
+            } else {
+                sources.overlayMoved(at: now)
+            }
+        }
         let signpost = Log.signposter.beginInterval("Pointer", id: Log.signposter.makeSignpostID(),
                                                     "type=\(event.type.rawValue) age=\((CACurrentMediaTime() - event.timestamp) * 1000, format: .fixed(precision: 2))ms")
         defer {
@@ -184,8 +193,9 @@ final class OverlayController {
         let global = event.window.map { $0.convertPoint(toScreen: event.locationInWindow) } ?? event.locationInWindow
         switch event.type {
         case .mouseMoved:
-            // A move over the click-through overlay has no window to convert from.
-            moved(to: event.window == nil ? NSEvent.mouseLocation : global)
+            // A move over the click-through overlay has no window to convert from; global-monitor
+            // moves carry screen coordinates.
+            moved(to: event.window == nil && !fromGlobalMonitor ? NSEvent.mouseLocation : global)
         case .rightMouseDragged, .otherMouseDragged:
             moved(to: global)
         case .leftMouseDragged:
@@ -339,7 +349,7 @@ final class OverlayController {
         animateRingScale(1)
         if button == .left { finishStroke() }
         if settings.ringMode == .clickOnly && buttonsDown.isEmpty {
-            clickOnlyHideTimer = Timer.scheduledTimer(withTimeInterval: 0.35, repeats: false) { [weak self] _ in
+            clickOnlyHideTimer = Timer.common(withTimeInterval: 0.35, repeats: false) { [weak self] _ in
                 MainActor.assumeIsolated { self?.updateCursorLayers(animated: true) }
             }
         }
@@ -401,7 +411,7 @@ final class OverlayController {
         guard idleTimer == nil, visible else { return }
         let idle = IdleVisibility(idleSeconds: settings.idleHideSeconds)
         guard let wait = idle.secondsUntilHide(sinceLastMove: CACurrentMediaTime() - lastMove) else { return }
-        idleTimer = Timer.scheduledTimer(withTimeInterval: max(wait, 0.05), repeats: false) { [weak self] _ in
+        idleTimer = Timer.common(withTimeInterval: max(wait, 0.05), repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.idleTimer = nil
@@ -439,7 +449,7 @@ final class OverlayController {
             CATransaction.commit()
         }
         guard companionTimer == nil, let next = companionAnim.nextChange(after: now) else { return }
-        companionTimer = Timer.scheduledTimer(withTimeInterval: max(next - now, 0.02), repeats: false) { [weak self] _ in
+        companionTimer = Timer.common(withTimeInterval: max(next - now, 0.02), repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.companionTimer = nil
                 // Also re-evaluates visibility, e.g. when the hello wave ends.
@@ -524,7 +534,7 @@ final class OverlayController {
         a.fillMode = .forwards
         a.isRemovedOnCompletion = false
         s.layer.add(a, forKey: "fade")
-        Timer.scheduledTimer(withTimeInterval: fade.lifetime + 0.05, repeats: false) { [weak self] _ in
+        Timer.common(withTimeInterval: fade.lifetime + 0.05, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
                 s.layer.removeFromSuperlayer()
                 self?.strokes.removeAll { $0 === s }
@@ -532,7 +542,7 @@ final class OverlayController {
         }
         if inkArmed && settings.inkInput == .captureWhileDrawing {
             autoReleaseTimer?.invalidate()
-            autoReleaseTimer = Timer.scheduledTimer(withTimeInterval: settings.inkAutoReleaseSeconds, repeats: false) { [weak self] _ in
+            autoReleaseTimer = Timer.common(withTimeInterval: settings.inkAutoReleaseSeconds, repeats: false) { [weak self] _ in
                 MainActor.assumeIsolated {
                     guard let self, self.inkArmed, self.stroke == nil else { return }
                     Log.overlay.notice("ink auto-release: overlay is click-through again")

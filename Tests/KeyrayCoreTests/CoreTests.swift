@@ -610,3 +610,11 @@ private func vscode(_ label: String, _ imported: ImportedKeybindings?) -> String
     #expect((try obj(server.handle("nope"))["error"] as! [String: Any])["code"] as? Int == -32700)
     #expect((try obj(server.handle(#"{"jsonrpc":"2.0","id":5,"method":"x"}"#))["error"] as! [String: Any])["code"] as? Int == -32601)
 }
+
+@Test func globalMovesAreOnlyABackupForTheOverlay() {
+    var s = PointerSources()
+    #expect(s.acceptsGlobalMove(at: 5))
+    s.overlayMoved(at: 10)
+    #expect(!s.acceptsGlobalMove(at: 10.05))
+    #expect(s.acceptsGlobalMove(at: 10.2))
+}

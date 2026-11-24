@@ -84,7 +84,7 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
 
     private func scheduleClear() {
         clearTimer?.invalidate()
-        clearTimer = Timer.scheduledTimer(withTimeInterval: feed.linger + 0.02, repeats: false) { [weak self] _ in
+        clearTimer = Timer.common(withTimeInterval: feed.linger + 0.02, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.feed.prune(now: CACurrentMediaTime())
@@ -114,11 +114,11 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
         }
         steps.append((t + 0.5, AppShortcut.toggleLaser.stroke)) // hidden when "hide activation keys" is on
         for (delay, stroke) in steps {
-            Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+            Timer.common(withTimeInterval: delay, repeats: false) { [weak self] _ in
                 MainActor.assumeIsolated { self?.record(stroke, isRepeat: false) }
             }
         }
-        Timer.scheduledTimer(withTimeInterval: t + 0.6, repeats: false) { [weak self] _ in
+        Timer.common(withTimeInterval: t + 0.6, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.feed.mode = saved
                 self?.previewApp = nil

@@ -132,28 +132,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: Input
 
-    /// Clicks and drags from every app (global monitor), and events on our own overlay (local
+    /// Clicks and drags from every app (global monitor), and events sent to this app (local
     /// monitor). NSEvent's global monitor needs no permission for mouse events (only key events
     /// require Accessibility), so this works in the sandbox as is.
     ///
-    /// Plain moves come only through the local monitor: the overlay covers every display, so the
-    /// window server sends each move to it (with no `window`, and the window number of the app
-    /// underneath) even though it is click-through. A global mouseMoved monitor would deliver every
-    /// move a second time.
+    /// Plain moves normally come through the local monitor: the overlay covers every display, so
+    /// the window server sends each move to it (with no `window`, and the window number of the app
+    /// underneath) even though it is click-through. Moves over our own windows arrive there too,
+    /// with their `window`. Global moves are only a backup for when the overlay gets none, such as
+    /// while another app tracks a menu (`PointerSources`), so a move is still drawn once.
     private func installMouseMonitors() {
         guard monitors.isEmpty else { return }
-        let mask: NSEvent.EventTypeMask = [.leftMouseDown, .leftMouseUp, .leftMouseDragged,
+        let mask: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDown, .leftMouseUp, .leftMouseDragged,
                                            .rightMouseDown, .rightMouseUp, .rightMouseDragged,
                                            .otherMouseDown, .otherMouseUp, .otherMouseDragged]
+        // Global moves only fill in while the overlay gets none (another app's menu tracking).
         if let global = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: { [weak self] e in
-            MainActor.assumeIsolated { self?.overlay.handle(e) }
+            MainActor.assumeIsolated { self?.overlay.handle(e, fromGlobalMonitor: true) }
         }) { monitors.append(global) }
-        // Moves over the overlay, and everything on it while ink mode holds the mouse. Our
-        // Settings and onboarding windows always come with a `window`.
-        if let local = NSEvent.addLocalMonitorForEvents(matching: mask.union(.mouseMoved), handler: { [weak self] e in
-            MainActor.assumeIsolated {
-                if e.window is OverlayWindow || (e.type == .mouseMoved && e.window == nil) { self?.overlay.handle(e) }
-            }
+        // Everything sent to this app: moves over the overlay, everything on it while ink mode
+        // holds the mouse, and our own Settings, onboarding and menu windows, which the global
+        // monitor never sees.
+        if let local = NSEvent.addLocalMonitorForEvents(matching: mask, handler: { [weak self] e in
+            MainActor.assumeIsolated { self?.overlay.handle(e) }
             return e
         }) { monitors.append(local) }
         Log.app.notice("mouse monitors installed: \(self.monitors.count)")
