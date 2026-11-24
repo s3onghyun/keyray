@@ -171,6 +171,14 @@ MCP (tools `show_keys` and `show_caption`), for Claude Code, Codex or any MCP cl
 claude mcp add keyray -- /Applications/Keyray.app/Contents/MacOS/Keyray mcp
 ```
 
+Or have Claude Code caption every shell command it runs, with a `PreToolUse` hook in
+`.claude/settings.json`:
+
+```json
+{ "hooks": { "PreToolUse": [ { "matcher": "Bash", "hooks": [ { "type": "command",
+  "command": "/Applications/Keyray.app/Contents/MacOS/Keyray caption --source claude-code \"$(jq -r .tool_input.command | head -c 200)\"" } ] } ] } }
+```
+
 Keys an agent types with CGEventPost, System Events or cliclick show as ordinary keycaps if the
 posting app has Accessibility. Keys sent with Playwright/CDP, or typed into a terminal through a
 pty, never become macOS key events, so the script should also call `keyray show`.
