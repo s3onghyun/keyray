@@ -159,3 +159,18 @@ public func arrowHead(from start: Point, to end: Point, length: Double, spreadDe
     return (Point(end.x + cos(a1) * headLength, end.y + sin(a1) * headLength),
             Point(end.x + cos(a2) * headLength, end.y + sin(a2) * headLength))
 }
+
+/// Picks which pointer moves to draw. The full-screen overlay normally gets every move itself;
+/// the global monitor is the backup for moves it does not get (another app's menu or toolbar
+/// tracking), used only after the overlay has been quiet for `quiet` seconds so a move never
+/// arrives twice or out of order.
+public struct PointerSources: Sendable {
+    public var quiet = 0.1
+    private var lastOverlayMove = -Double.infinity
+
+    public init() {}
+
+    public mutating func overlayMoved(at time: Double) { lastOverlayMove = time }
+
+    public func acceptsGlobalMove(at time: Double) -> Bool { time - lastOverlayMove > quiet }
+}

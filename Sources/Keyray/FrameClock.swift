@@ -36,3 +36,15 @@ final class FrameClock: NSObject {
         onFrame(link)
     }
 }
+
+extension Timer {
+    /// Like `scheduledTimer`, but also fires while a menu or slider is tracking the mouse
+    /// (`.common` run loop modes), so the overlays keep animating then.
+    @discardableResult
+    static func common(withTimeInterval interval: TimeInterval, repeats: Bool,
+                       block: @escaping @Sendable (Timer) -> Void) -> Timer {
+        let timer = Timer(timeInterval: interval, repeats: repeats, block: block)
+        RunLoop.main.add(timer, forMode: .common)
+        return timer
+    }
+}
