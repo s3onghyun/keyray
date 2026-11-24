@@ -20,7 +20,7 @@ Requires macOS 14 or later on Apple Silicon.
 - **Homebrew:**
 
   ```sh
-  brew install --cask s3onghyun/tap/keyray
+  brew trust s3onghyun/tap && brew install --cask s3onghyun/tap/keyray
   ```
 
 Keyray lives in the menu bar (no Dock icon). Choose a keycap mode in its menu to start showing keys.
@@ -82,7 +82,7 @@ its own. Hotaru, the firefly mascot, is drawn in Swift code and is MIT like the 
 - **에이전트 알림:** Playwright·Claude Code·Codex 같은 에이전트가 `keyray show`/`keyray caption`,
   `keyray://` URL, MCP로 키와 설명을 보내면 🤖 배지와 함께 표시됩니다. 사람이 친 키와 구분됩니다.
 - **설치:** [Releases](https://github.com/s3onghyun/keyray/releases/latest)의 공증된 DMG, 또는
-  `brew install --cask s3onghyun/tap/keyray`. macOS 14 이상, Apple Silicon.
+  `brew trust s3onghyun/tap && brew install --cask s3onghyun/tap/keyray`. macOS 14 이상, Apple Silicon.
 - **권한:** 내가 치는 키를 보여 줄 때만 **입력 모니터링**이 필요합니다(듣기 전용, 저장·전송 없음,
   암호 입력은 macOS가 가림). **손쉬운 사용** 권한은 Keyray가 요구하지 않습니다. 에이전트가
   `CGEventPost`·System Events·cliclick으로 키를 칠 때 그 에이전트 쪽 앱에만 필요합니다.
