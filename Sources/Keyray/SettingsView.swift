@@ -66,6 +66,15 @@ struct SettingsView: View {
                     if placement.wrappedValue == nil { Text("Custom (dragged)").tag(KeycapPlacement?.none) }
                 }
             }
+            Section("Agents") {
+                Toggle("Show keys and captions sent by agents (🤖 badge)", isOn: $store.settings.agentAnnouncements)
+                Text("Agents can run `keyray show ⌘K --caption \"npm test\" --source claude`, open `keyray://show?keys=cmd+k&caption=…`, or use the `keyray mcp` server. Local to this Mac and user only.")
+                    .font(.callout).foregroundStyle(.secondary)
+                HStack {
+                    Button("Copy CLI install command") { copy("mkdir -p ~/.local/bin && ln -sf '\(executable)' ~/.local/bin/keyray") }
+                    Button("Copy Claude Code MCP command") { copy("claude mcp add keyray -- '\(executable)' mcp") }
+                }
+            }
             Section("Privacy prompts") {
                 Toggle("Hide overlays while System Settings or a security prompt is in front",
                        isOn: $store.settings.hideWhileSystemSettingsFrontmost)
@@ -97,6 +106,13 @@ struct SettingsView: View {
     private var placement: Binding<KeycapPlacement?> {
         Binding(get: { KeycapPlacement(position: store.settings.keycapPosition) },
                 set: { if let p = $0 { store.settings.keycapPosition = p.position } })
+    }
+
+    private var executable: String { Bundle.main.executablePath ?? "/Applications/Keyray.app/Contents/MacOS/Keyray" }
+
+    private func copy(_ s: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(s, forType: .string)
     }
 
     private func color(_ binding: Binding<RGBA>) -> Binding<Color> {

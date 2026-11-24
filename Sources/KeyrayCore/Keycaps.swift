@@ -109,6 +109,8 @@ public struct KeycapEntry: Equatable, Sendable {
         case stroke(KeyStroke)
         /// A run of plain typing, joined into one cap.
         case typing
+        /// Keys or a caption an agent announced; `source` names it in the cap's badge.
+        case announced(source: String)
     }
 
     public var kind: Kind
@@ -120,6 +122,7 @@ public struct KeycapEntry: Equatable, Sendable {
 
     public func display(showCount: Bool) -> String {
         if case .typing = kind { return text }
+        if case .announced(let source) = kind { return text.isEmpty ? "🤖 \(source)" : "🤖 \(source)  \(text)" }
         return showCount && count > 1 ? "\(text) ×\(count)" : text
     }
 }
@@ -179,6 +182,12 @@ public struct KeycapFeed: Sendable {
         }
         append(KeycapEntry(kind: .stroke(stroke), text: stroke.label, lastTime: time, subtitle: subtitle))
         return true
+    }
+
+    /// Shows an agent's announcement in any keycap mode (it needs no Input Monitoring).
+    public mutating func announce(_ a: Announcement, time: Double) {
+        prune(now: time)
+        append(KeycapEntry(kind: .announced(source: a.source), text: a.keys ?? "", lastTime: time, subtitle: a.caption))
     }
 
     /// Clears everything once `linger` seconds pass with no press. Returns true while anything is shown.

@@ -542,3 +542,71 @@ private func vscode(_ label: String, _ imported: ImportedKeybindings?) -> String
     #expect(KeycapPlacement.topLeft.position == UnitPoint(x: 0.15, y: 0.88))
     #expect(KeycapPlacement(position: UnitPoint(x: 0.3, y: 0.4)) == nil)
 }
+
+// MARK: - Agent announcements
+
+@Test func announcementSanitizesAndLimits() {
+    let a = Announcement(keys: "cmd+shift+p", caption: "  run\n\ttests\u{202E}evil\u{0007}  ", source: nil)!
+    #expect(a.keys == "⇧⌘P")
+    #expect(a.caption == "run testsevil")
+    #expect(a.source == "agent")
+    let long = Announcement(keys: nil, caption: String(repeating: "x", count: 500), source: String(repeating: "s", count: 50))!
+    #expect(long.caption!.count == Announcement.maxCaption && long.caption!.hasSuffix("…"))
+    #expect(long.source.count == Announcement.maxSource)
+    #expect(Announcement(keys: " \n", caption: "\u{0000}", source: "x") == nil)
+    #expect(Announcement(keys: "⌘K", caption: nil)?.keys == "⌘K")
+    #expect(Announcement(keys: "ctrl+c", caption: nil)?.keys == "⌃C")
+    #expect(Announcement(keys: "a+", caption: nil)?.keys == "a+")
+}
+
+@Test func announcementParsesArgumentsURLsAndJSON() throws {
+    #expect(try Announcement.parse(arguments: ["show", "⌘K", "--caption", "npm test", "--source", "claude"]).get()
+        == Announcement(keys: "⌘K", caption: "npm test", source: "claude"))
+    #expect(try Announcement.parse(arguments: ["caption", "Deploying", "now"]).get().caption == "Deploying now")
+    #expect(Announcement.parse(arguments: ["show", "--caption"]) == .failure(.missingValue("--caption")))
+    #expect(Announcement.parse(arguments: ["show"]) == .failure(.empty))
+    #expect(Announcement.parse(arguments: ["rm"]) == .failure(.usage))
+    let a = Announcement(url: URL(string: "keyray://show?keys=cmd%2Bk&caption=npm%20test&source=codex")!)
+    #expect(a == Announcement(keys: "⌘K", caption: "npm test", source: "codex"))
+    #expect(Announcement(url: URL(string: "keyray://caption?text=hi")!)?.caption == "hi")
+    #expect(Announcement(url: URL(string: "https://show?keys=x")!) == nil)
+    #expect(Announcement(url: a!.url) == a)
+    #expect(Announcement(json: a!.json) == a)
+    #expect(Announcement(json: #"{"keys":"x\u0007y","source":"‮abc"}"#)?.keys == "xy")
+    #expect(Announcement(json: "{" + String(repeating: " ", count: 5000) + "}") == nil)
+}
+
+@Test func rateLimiterAllowsBurstThenRefills() {
+    var r = RateLimiter(capacity: 3, perSecond: 2)
+    #expect((0..<5).map { _ in r.allow(now: 10) } == [true, true, true, false, false])
+    #expect(r.allow(now: 10.5) == true)
+    #expect(r.allow(now: 10.5) == false)
+}
+
+@Test func feedShowsAnnouncementsInAnyModeWithBadge() {
+    var feed = KeycapFeed(mode: .off)
+    feed.announce(Announcement(keys: "⌘K", caption: "npm test", source: "claude")!, time: 1)
+    #expect(feed.entries.map { $0.display(showCount: true) } == ["🤖 claude  ⌘K"])
+    #expect(feed.currentSubtitle == "npm test")
+    feed.announce(Announcement(keys: nil, caption: "Deploying", source: nil)!, time: 1.1)
+    #expect(feed.entries.last?.display(showCount: true) == "🤖 agent")
+    #expect(mutate(&feed) { $0.prune(now: 10) } == false)
+}
+
+@Test func mcpServerListsAndCallsTools() throws {
+    var shown: [Announcement] = []
+    let server = MCPServer(version: "9") { shown.append($0) }
+    func obj(_ s: String?) throws -> [String: Any] { try JSONSerialization.jsonObject(with: Data(s!.utf8)) as! [String: Any] }
+    let ini = try obj(server.handle(#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26"}}"#))
+    #expect((ini["result"] as! [String: Any])["protocolVersion"] as? String == "2025-03-26")
+    #expect(server.handle(#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#) == nil)
+    let list = try obj(server.handle(#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#))
+    #expect(((list["result"] as! [String: Any])["tools"] as! [[String: Any]]).map { $0["name"] as! String } == ["show_keys", "show_caption"])
+    let call = try obj(server.handle(#"{"jsonrpc":"2.0","id":"c","method":"tools/call","params":{"name":"show_keys","arguments":{"keys":"cmd+k","caption":"npm test","source":"claude"}}}"#))
+    #expect(call["id"] as? String == "c" && (call["result"] as! [String: Any])["isError"] as? Bool == false)
+    #expect(shown == [Announcement(keys: "⌘K", caption: "npm test", source: "claude")!])
+    let empty = try obj(server.handle(#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"show_caption","arguments":{}}}"#))
+    #expect((empty["result"] as! [String: Any])["isError"] as? Bool == true && shown.count == 1)
+    #expect((try obj(server.handle("nope"))["error"] as! [String: Any])["code"] as? Int == -32700)
+    #expect((try obj(server.handle(#"{"jsonrpc":"2.0","id":5,"method":"x"}"#))["error"] as! [String: Any])["code"] as? Int == -32601)
+}

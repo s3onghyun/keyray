@@ -103,6 +103,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var keycapSubtitles = true
     /// The user's own VS Code keybindings.json, if imported; it names shortcuts in VS Code.
     public var vscodeKeybindings: ImportedKeybindings?
+    /// Show keys and captions agents send through the `keyray` CLI, `keyray://` URLs or MCP.
+    public var agentAnnouncements = true
 
     public var laserColor = RGBA.laserRed
     public var laserTrailSeconds = 0.45
@@ -132,6 +134,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         greeted = v(.greeted, d.greeted)
         keycapSubtitles = v(.keycapSubtitles, d.keycapSubtitles)
         vscodeKeybindings = v(.vscodeKeybindings, d.vscodeKeybindings)
+        agentAnnouncements = v(.agentAnnouncements, d.agentAnnouncements)
         ringMode = v(.ringMode, d.ringMode)
         ringDiameter = v(.ringDiameter, d.ringDiameter)
         ringLineWidth = v(.ringLineWidth, d.ringLineWidth)

@@ -63,6 +63,10 @@ cat > "$app/Contents/Info.plist" <<PLIST
   <key>CFBundleDisplayName</key><string>Keyray</string>
   <key>CFBundleExecutable</key><string>Keyray</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
+  <key>CFBundleURLTypes</key><array><dict>
+    <key>CFBundleURLName</key><string>$bundle_identifier</string>
+    <key>CFBundleURLSchemes</key><array><string>keyray</string></array>
+  </dict></array>
   <key>CFBundleDevelopmentRegion</key><string>en</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$version</string>
