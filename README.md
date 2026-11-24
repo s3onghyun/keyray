@@ -145,6 +145,36 @@ Overlays are ordinary windows, so they appear in recordings and shares of the **
 A single-window or single-tab share (Zoom, Meet, Teams) carries only that app's window, so the
 overlays are not in it. The menu's "Screen sharing tips…" says this to the user.
 
+## Agents
+
+Agents that drive the Mac (for a screen recording or a live demo) can tell Keyray what they are
+doing. Their keycaps carry a small 🤖 badge with the agent's name, so viewers can tell agent input
+from a person's. No permission is needed, and it works in any keycap mode (turn it off under
+Settings › Agents). Input never leaves the Mac: the CLI and MCP server reach the running app with a
+per-user distributed notification, and `keyray://` URLs go through Launch Services. Keys are
+limited to 32 characters, captions to 120 and agent names to 24, control and bidi characters are
+removed, and the app shows at most 8 at once, then 4 a second.
+
+```sh
+mkdir -p ~/.local/bin && ln -sf /Applications/Keyray.app/Contents/MacOS/Keyray ~/.local/bin/keyray
+keyray show ⌘K --caption "Open the command bar" --source claude
+keyray show cmd+shift+p --caption "Command Palette"      # words become ⇧⌘P
+keyray caption "npm test" --source codex
+open -g "keyray://show?keys=cmd%2Bs&caption=Save&source=playwright"
+```
+
+`keyray show` starts the app if it is not running. Settings › Agents copies both commands below.
+
+MCP (tools `show_keys` and `show_caption`), for Claude Code, Codex or any MCP client:
+
+```sh
+claude mcp add keyray -- /Applications/Keyray.app/Contents/MacOS/Keyray mcp
+```
+
+Keys an agent types with CGEventPost, System Events or cliclick show as ordinary keycaps if the
+posting app has Accessibility. Keys sent with Playwright/CDP, or typed into a terminal through a
+pty, never become macOS key events, so the script should also call `keyray show`.
+
 ## Build
 
 Requires macOS 14 or later and Swift 6. With only the Command Line Tools 27.2 installed (no Xcode),

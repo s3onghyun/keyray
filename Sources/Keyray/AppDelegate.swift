@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var onboardingWindow: NSWindow?
     private var lastKeycapMode = KeycapMode.shortcutsOnly
     private var permissionPoll: Timer?
+    private var announceLimiter = RateLimiter()
 
     /// Reasons the overlays are hidden right now; they show only when this is empty.
     private enum HideReason: Hashable { case switchedOff, permissionPrompt, systemUI }
@@ -65,6 +66,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             MainActor.assumeIsolated { self?.frontmostChanged(id) }
         }
 
+        // Agent announcements from `keyray show|caption|mcp` (see CLI.swift).
+        DistributedNotificationCenter.default().addObserver(forName: .init(Announcement.notificationName),
+                                                            object: nil, queue: .main) { [weak self] note in
+            let json = note.object as? String
+            MainActor.assumeIsolated { if let json, let a = Announcement(json: json) { self?.announce(a) } }
+        }
+
         if !settings.enabled { hideReasons.insert(.switchedOff) }
         if settings.keycapMode != .off { lastKeycapMode = settings.keycapMode; startKeycaps(prompt: false) }
         frontmostChanged(NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
@@ -103,6 +111,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             showOnboarding()
             requestInputMonitoring()
         }
+    }
+
+    /// `keyray://show?keys=…&caption=…&source=…` and `keyray://caption?text=…`.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            if let a = Announcement(url: url) { announce(a) } else { Log.app.notice("ignored URL with an unknown form") }
+        }
+    }
+
+    private func announce(_ a: Announcement) {
+        guard settings.agentAnnouncements else { return }
+        guard announceLimiter.allow(now: CACurrentMediaTime()) else {
+            Log.app.notice("announcement dropped by the rate limit")
+            return
+        }
+        Log.app.notice("announcement from \(a.source, privacy: .public)")
+        keycaps?.announce(a)
     }
 
     // MARK: Input

@@ -71,6 +71,18 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
         let subtitle = settings.keycapSubtitles ? ShortcutSubtitles.subtitle(for: stroke, bundleID: app, imported: settings.vscodeKeybindings) : nil
         guard !suppressed, feed.record(stroke, time: CACurrentMediaTime(), isRepeat: isRepeat, subtitle: subtitle) else { return }
         render()
+        scheduleClear()
+    }
+
+    /// An agent's keys or caption (CLI, URL or MCP), shown with a 🤖 badge in any keycap mode.
+    func announce(_ a: Announcement) {
+        guard !suppressed else { return }
+        feed.announce(a, time: CACurrentMediaTime())
+        render()
+        scheduleClear()
+    }
+
+    private func scheduleClear() {
         clearTimer?.invalidate()
         clearTimer = Timer.scheduledTimer(withTimeInterval: feed.linger + 0.02, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -132,11 +144,14 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
     private func render() {
         let signpost = Log.signposter.beginInterval("Keycaps render")
         defer { Log.signposter.endInterval("Keycaps render", signpost) }
-        let texts: [String]
+        let texts: [(String, badge: String?)]
         if isPositioning {
-            texts = ["Drag to move", "⌃⌥⌘K"]
+            texts = [("Drag to move", nil), ("⌃⌥⌘K", nil)]
         } else {
-            texts = feed.entries.map { $0.display(showCount: settings.keycapShowRepeatCount) }
+            texts = feed.entries.map { e in
+                guard case .announced(let source) = e.kind else { return (e.display(showCount: settings.keycapShowRepeatCount), nil) }
+                return (e.display(showCount: false), "🤖 \(source)")
+            }
         }
         for v in stack.arrangedSubviews { v.removeFromSuperview() }
         for v in column.arrangedSubviews where v !== stack { v.removeFromSuperview() }
@@ -144,8 +159,10 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
             window.orderOut(nil)
             return
         }
-        for t in texts { stack.addArrangedSubview(cap(t, dashed: isPositioning)) }
-        if !isPositioning, settings.keycapSubtitles, let subtitle = feed.currentSubtitle {
+        for t in texts { stack.addArrangedSubview(cap(t.0, dashed: isPositioning, badge: t.badge)) }
+        let agentCaption: Bool
+        if case .announced = feed.entries.last?.kind { agentCaption = true } else { agentCaption = false }
+        if !isPositioning, settings.keycapSubtitles || agentCaption, let subtitle = feed.currentSubtitle {
             column.addArrangedSubview(subtitleView(subtitle))
         }
         window.setContentSize(column.fittingSize)
@@ -231,7 +248,8 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
 
     /// One cap in the theme's style: dark glass (Minimal), night-ink plaque with a lit lantern dot (Hotaru),
     /// hanji tag with a seal mark (Brush & Ink) or frosted glass (Keynote Glow).
-    private func cap(_ text: String, dashed: Bool) -> NSView {
+    /// `badge` is the leading part of `text` that marks agent input; it is drawn smaller and dimmer.
+    private func cap(_ text: String, dashed: Bool, badge: String? = nil) -> NSView {
         let style = settings.style
         let k = settings.keycapScale
         let label = NSTextField(labelWithString: text)
@@ -296,6 +314,13 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
             seal.frame = CGRect(x: 4 * k, y: 4 * k, width: 7 * k, height: 7 * k)
             seal.cornerRadius = 1
             box.layer?.addSublayer(seal)
+        }
+        if let badge, let font = label.font, text.hasPrefix(badge) {
+            let s = NSMutableAttributedString(string: text, attributes: [.font: font, .foregroundColor: label.textColor ?? .white])
+            s.addAttributes([.font: NSFont.systemFont(ofSize: font.pointSize * 0.55, weight: .semibold),
+                             .foregroundColor: (label.textColor ?? .white).withAlphaComponent(0.75),
+                             .baselineOffset: font.pointSize * 0.12], range: NSRange(location: 0, length: (badge as NSString).length))
+            label.attributedStringValue = s
         }
         box.addSubview(label)
         label.translatesAutoresizingMaskIntoConstraints = false
