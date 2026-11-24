@@ -1,11 +1,99 @@
 # Keyray (키레이)
 
-A presentation cursor highlighter for macOS: a menu-bar app that makes the cursor, clicks and
-shortcuts easy to see while presenting, teaching or recording. Its mascot is Hotaru. The bundle id
-is `com.s3onghyun.keyray`; the project was developed under the codename cursor-proto.
+**Show your keystrokes and shortcuts on screen — and let your AI agent announce what it is doing.**
 
-It is a native Swift app built for the Mac App Store's rules from day one: App Sandbox on,
-Hardened Runtime on, no Accessibility and no Screen Recording permission.
+![Playwright drives Chrome while Keyray shows its ⌘A ⌘C ⌘V with a 🤖 playwright badge and captions](docs/keyray-demo.gif)
+
+Keyray is a free, open-source menu-bar app for macOS. While you present, teach or record, it shows
+the keys you press (with what the shortcut does in VS Code, Xcode, Terminal, Chrome and about 20
+other apps), highlights the cursor and clicks, and gives you a laser pointer and ink that fades on
+its own. AI agents and scripts that drive your Mac can send their own keycaps and captions, marked
+with a 🤖 badge, so viewers can tell agent input from yours.
+
+## Install
+
+Requires macOS 14 or later on Apple Silicon.
+
+- **Download:** the notarized `Keyray-<version>.dmg` from
+  [Releases](https://github.com/s3onghyun/keyray/releases/latest), open it and drag Keyray to
+  Applications.
+- **Homebrew:**
+
+  ```sh
+  brew install --cask s3onghyun/tap/keyray
+  ```
+
+Keyray lives in the menu bar (no Dock icon). Choose a keycap mode in its menu to start showing keys.
+
+## Why it asks for permission
+
+| Permission | Needed for | Not needed for |
+|---|---|---|
+| **Input Monitoring** | Keycaps of what *you* type. Keyray uses a listen-only event tap: it cannot change, block or create keys, stores and sends nothing, and macOS hides password fields from it. | Cursor ring, clicks, laser, ink, shortcuts, and keys or captions sent by agents |
+| **Accessibility** | Keyray itself never asks for it. Only an *agent* that types with `CGEventPost`, System Events or cliclick needs it (in its own app) for macOS to deliver those keys. | Everything Keyray does |
+
+Keyray runs in the App Sandbox with the Hardened Runtime and never asks for Screen Recording. See
+[Permissions](#permissions) for the step-by-step prompt.
+
+## Let your agent announce itself
+
+```sh
+mkdir -p ~/.local/bin && ln -sf /Applications/Keyray.app/Contents/MacOS/Keyray ~/.local/bin/keyray
+keyray show cmd+shift+p --caption "Command Palette" --source claude   # keycap ⇧⌘P + caption
+keyray caption "npm test" --source codex                              # caption only
+open -g "keyray://show?keys=cmd%2Bs&caption=Save&source=playwright"   # from any language
+claude mcp add keyray -- /Applications/Keyray.app/Contents/MacOS/Keyray mcp   # MCP: show_keys, show_caption
+```
+
+Keys sent with Playwright/CDP or typed into a terminal through a pty never become macOS key events,
+so no keystroke visualizer can see them; these commands are how they reach the screen. Details,
+limits and a Claude Code hook that captions every shell command: [Agents](#agents).
+
+## FAQ
+
+**How is it different from KeyCastr?** KeyCastr is a long-standing open-source keystroke
+visualizer, and a fine choice if keystrokes are all you need. Keyray adds the name of each
+shortcut in the frontmost app, a cursor and click highlighter, laser pointer and ink in the same
+app, and a channel for agents (CLI, `keyray://` URLs, MCP) with the 🤖 badge.
+
+**Does it work in Zoom, Meet or Teams?** In a share of the entire screen, yes. A single-window share
+carries only that window, so the overlays are not in it. See [Screen sharing](#screen-sharing).
+
+**Is anything sent anywhere?** No. Keyray has no network code; agents reach it through a per-user
+distributed notification or Launch Services on the same Mac.
+
+**Mac App Store?** Not yet. For now the notarized download and Homebrew above are the way to get it.
+
+**Intel Macs?** Not yet; the release is Apple Silicon only. Building from source on Intel should
+work (see [Build](#build)), untested.
+
+## License
+
+MIT, see [LICENSE](LICENSE). The Keyray name and the app icon are not covered; a fork should use
+its own. Hotaru, the firefly mascot, is drawn in Swift code and is MIT like the rest of the code.
+
+## 한국어
+
+**키 입력과 단축키를 화면에 보여 주고, AI 에이전트가 지금 무엇을 하는지 화면에 알리게 해 주는
+무료 오픈소스 macOS 메뉴 막대 앱입니다.**
+
+- **무엇을 하나:** 누른 키와 단축키 이름(VS Code, Xcode, 터미널, Chrome 등 20여 개 앱의 기본
+  단축키), 커서·클릭 강조, 레이저 포인터, 저절로 사라지는 잉크.
+- **에이전트 알림:** Playwright·Claude Code·Codex 같은 에이전트가 `keyray show`/`keyray caption`,
+  `keyray://` URL, MCP로 키와 설명을 보내면 🤖 배지와 함께 표시됩니다. 사람이 친 키와 구분됩니다.
+- **설치:** [Releases](https://github.com/s3onghyun/keyray/releases/latest)의 공증된 DMG, 또는
+  `brew install --cask s3onghyun/tap/keyray`. macOS 14 이상, Apple Silicon.
+- **권한:** 내가 치는 키를 보여 줄 때만 **입력 모니터링**이 필요합니다(듣기 전용, 저장·전송 없음,
+  암호 입력은 macOS가 가림). **손쉬운 사용** 권한은 Keyray가 요구하지 않습니다. 에이전트가
+  `CGEventPost`·System Events·cliclick으로 키를 칠 때 그 에이전트 쪽 앱에만 필요합니다.
+- **라이선스:** MIT. Keyray 이름과 앱 아이콘은 제외합니다.
+
+## About
+
+The bundle id is `com.s3onghyun.keyray`; the project was developed under the codename
+cursor-proto. Its mascot is Hotaru. It is a native Swift app built for the Mac App Store's rules
+from day one: App Sandbox on, Hardened Runtime on, no Accessibility and no Screen Recording
+permission.
 
 ## What it does
 
