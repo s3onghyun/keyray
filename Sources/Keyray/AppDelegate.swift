@@ -291,7 +291,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 openSettings: { [weak self] in self?.openInputMonitoringSettings() },
                 retry: { [weak self] in self?.startKeycaps(prompt: false); self?.refreshOnboarding() })
             let w = NSWindow(contentViewController: NSHostingController(rootView: view))
-            w.title = "Keycaps need Input Monitoring"
+            w.title = String(localized: "Keycaps need Input Monitoring")
             w.styleMask = [.titled, .closable]
             w.isReleasedWhenClosed = false
             onboardingWindow = w
@@ -315,10 +315,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private var keycapStatusText: String {
         switch keyTap.state {
-        case .running: "Keycaps are on (listen-only, Input Monitoring granted)."
-        case .needsPermission: "Input Monitoring is not granted yet."
-        case .tapFailed: "Input Monitoring looks granted, but the key tap could not start. Quit and reopen the app."
-        case .stopped: KeyTap.hasPermission ? "Input Monitoring is granted. Keycaps are off." : "Input Monitoring is not granted yet."
+        case .running: String(localized: "Keycaps are on (listen-only, Input Monitoring granted).")
+        case .needsPermission: String(localized: "Input Monitoring is not granted yet.")
+        case .tapFailed: String(localized: "Input Monitoring looks granted, but the key tap could not start. Quit and reopen the app.")
+        case .stopped: KeyTap.hasPermission ? String(localized: "Input Monitoring is granted. Keycaps are off.") : String(localized: "Input Monitoring is not granted yet.")
         }
     }
 
@@ -327,9 +327,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Lets the user pick their keybindings.json; the sandbox can read only a file they choose.
     private func chooseVSCodeKeybindings() {
         let panel = NSOpenPanel()
-        panel.title = "Import VS Code keybindings"
-        panel.message = "Choose your keybindings.json. VS Code keeps it in ~/Library/Application Support/Code/User."
-        panel.prompt = "Import"
+        panel.title = String(localized: "Import VS Code keybindings")
+        panel.message = String(localized: "Choose your keybindings.json. VS Code keeps it in ~/Library/Application Support/Code/User.")
+        panel.prompt = String(localized: "Import")
         panel.allowedContentTypes = [.json]
         panel.allowsMultipleSelection = false
         // Inside the sandbox NSHomeDirectory() is the container; start in the real home's VS Code folder.
@@ -348,24 +348,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let (imported, summary) = try VSCodeKeybindings.parse(text, fileName: url.lastPathComponent)
             store.settings.vscodeKeybindings = imported
             Log.keys.notice("imported \(summary.imported) keybindings from \(url.lastPathComponent, privacy: .public): removed \(summary.removedDefaults), context \(summary.contextDependent), chords \(summary.chords), unreadable \(summary.unreadable)")
-            var lines = ["Imported \(summary.imported) shortcuts. VS Code subtitles now use your names for them."]
-            if summary.removedDefaults > 0 { lines.append("\(summary.removedDefaults) defaults you removed show no subtitle.") }
+            var lines = [String(localized: "Imported \(summary.imported) shortcuts. VS Code subtitles now use your names for them.")]
+            if summary.removedDefaults > 0 { lines.append(String(localized: "\(summary.removedDefaults) defaults you removed show no subtitle.")) }
             if summary.contextDependent > 0 {
-                lines.append("\(summary.contextDependent) keys do different things depending on where you are (\"when\"), so they show no subtitle.")
+                lines.append(String(localized: "\(summary.contextDependent) keys do different things depending on where you are (\"when\"), so they show no subtitle."))
             }
             if summary.chords + summary.unreadable > 0 {
-                lines.append("Skipped \(summary.chords) two-step chords and \(summary.unreadable) entries that could not be read.")
+                lines.append(String(localized: "Skipped \(summary.chords) two-step chords and \(summary.unreadable) entries that could not be read."))
             }
             message = lines.joined(separator: "\n\n")
         } catch {
             Log.keys.error("keybindings import failed: \(String(describing: error), privacy: .public)")
-            message = "Keyray could not read \(url.lastPathComponent) as a VS Code keybindings file."
+            message = String(localized: "Keyray could not read \(url.lastPathComponent) as a VS Code keybindings file.")
         }
         guard showSummary else { return }
         let alert = NSAlert()
-        alert.messageText = "VS Code keybindings"
+        alert.messageText = String(localized: "VS Code keybindings")
         alert.informativeText = message
-        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: String(localized: "OK"))
         NSApp.activate(ignoringOtherApps: true)
         alert.runModal()
     }
@@ -422,7 +422,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(item("Overlays On", shortcut: .toggleOverlays, checked: s.enabled) { $0.store.settings.enabled.toggle() })
         menu.addItem(.separator())
 
-        let themes = NSMenuItem(title: "Theme", action: nil, keyEquivalent: "")
+        let themes = NSMenuItem(title: String(localized: "Theme"), action: nil, keyEquivalent: "")
         let themeMenu = NSMenu()
         for theme in Theme.offered {
             themeMenu.addItem(item(theme.title, checked: s.theme == theme) { $0.store.settings.theme = theme })
@@ -459,7 +459,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(item("Set up Input Monitoring…", indent: 1) { $0.showOnboarding() })
         }
         menu.addItem(item("Preview keycaps", indent: 1) { $0.keycaps.preview() })
-        let subs = NSMenuItem(title: "Preview subtitles for", action: nil, keyEquivalent: "")
+        let subs = NSMenuItem(title: String(localized: "Preview subtitles for"), action: nil, keyEquivalent: "")
         subs.indentationLevel = 1
         let subsMenu = NSMenu()
         for (id, app) in ShortcutSubtitles.apps.sorted(by: { $0.value.name < $1.value.name }) {
@@ -470,7 +470,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(item("Shortcut Subtitles", checked: s.keycapSubtitles, indent: 1) { $0.store.settings.keycapSubtitles.toggle() })
         menu.addItem(item("Import VS Code keybindings…", indent: 1) { $0.chooseVSCodeKeybindings() })
         if let imported = s.vscodeKeybindings {
-            menu.addItem(item("Remove imported keybindings (\(imported.bindings.count))", indent: 1) {
+            menu.addItem(item(String(localized: "Remove imported keybindings (\(imported.bindings.count))"), indent: 1) {
                 $0.store.settings.vscodeKeybindings = nil
             })
         }
@@ -486,6 +486,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func header(_ title: String) -> NSMenuItem {
+        let title = NSLocalizedString(title, comment: "")
         if #available(macOS 14.0, *) { return NSMenuItem.sectionHeader(title: title) }
         let i = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         i.isEnabled = false
@@ -494,7 +495,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func item(_ title: String, shortcut: AppShortcut? = nil, key: String = "", checked: Bool = false,
                       indent: Int = 0, action: @escaping (AppDelegate) -> Void) -> NSMenuItem {
-        let i = ClosureMenuItem(title: title, keyEquivalent: key) { [weak self] in
+        // Titles missing from Localizable.strings (app and theme names) pass through unchanged.
+        let i = ClosureMenuItem(title: NSLocalizedString(title, comment: ""), keyEquivalent: key) { [weak self] in
             guard let self else { return }
             action(self)
             self.rebuildMenu()
@@ -514,7 +516,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func showSettings() {
         if settingsWindow == nil {
             let w = NSWindow(contentViewController: NSHostingController(rootView: SettingsView(store: store)))
-            w.title = "Settings"
+            w.title = String(localized: "Settings")
             w.styleMask = [.titled, .closable]
             w.isReleasedWhenClosed = false
             settingsWindow = w
@@ -527,8 +529,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func showSharingTips() {
         let alert = NSAlert()
-        alert.messageText = "Make the highlights visible to your audience"
-        alert.informativeText = """
+        alert.messageText = String(localized: "Make the highlights visible to your audience")
+        alert.informativeText = String(localized: """
         Zoom, Google Meet, Teams: share your entire screen ("Desktop", "Entire screen" or "Screen 1"), \
         not a single window or tab. A window share sends only that app's window, so the ring, ripples, \
         laser, ink and keycaps are not in it.
@@ -539,8 +541,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         QuickTime and other recorders: record the entire screen; everything shows up in the recording.
 
         ⌃⌥⌘O turns every overlay off and on at once.
-        """
-        alert.addButton(withTitle: "OK")
+        """)
+        alert.addButton(withTitle: String(localized: "OK"))
         NSApp.activate(ignoringOtherApps: true)
         alert.runModal()
     }

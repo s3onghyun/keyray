@@ -48,6 +48,7 @@ else
   lipo -create "$@" -output "$app/Contents/MacOS/Keyray"
 fi
 cp "$root/Resources/AppIcon.icns" "$app/Contents/Resources/AppIcon.icns"
+cp -R "$root/Resources/"*.lproj "$app/Contents/Resources/"
 
 sdk=${SDKROOT:-$(xcrun --sdk macosx --show-sdk-path)}
 sdk_version=$(plutil -extract ProductVersion raw "$sdk/System/Library/CoreServices/SystemVersion.plist")

@@ -69,7 +69,9 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
         // Shortcut Subtitles: the name comes from the dictionary of the app the key went to.
         let app = previewApp ?? NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         let subtitle = settings.keycapSubtitles ? ShortcutSubtitles.subtitle(for: stroke, bundleID: app, imported: settings.vscodeKeybindings) : nil
-        guard !suppressed, feed.record(stroke, time: CACurrentMediaTime(), isRepeat: isRepeat, subtitle: subtitle) else { return }
+        // Translated from Subtitles.strings; names missing there (imported VS Code names) stay as they are.
+        let localized = subtitle.map { Bundle.main.localizedString(forKey: $0, value: nil, table: "Subtitles") }
+        guard !suppressed, feed.record(stroke, time: CACurrentMediaTime(), isRepeat: isRepeat, subtitle: localized) else { return }
         render()
         scheduleClear()
     }
@@ -146,7 +148,7 @@ final class KeycapHUD: NSObject, NSWindowDelegate {
         defer { Log.signposter.endInterval("Keycaps render", signpost) }
         let texts: [(String, badge: String?)]
         if isPositioning {
-            texts = [("Drag to move", nil), ("⌃⌥⌘K", nil)]
+            texts = [(String(localized: "Drag to move"), nil), ("⌃⌥⌘K", nil)]
         } else {
             texts = feed.entries.map { e in
                 guard case .announced(let source) = e.kind else { return (e.display(showCount: settings.keycapShowRepeatCount), nil) }
