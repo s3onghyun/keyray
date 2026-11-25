@@ -81,7 +81,7 @@ struct SettingsView: View {
             }
             Section("Shortcuts") {
                 ForEach(AppShortcut.allCases, id: \.self) { s in
-                    LabeledContent(s.title, value: s.stroke.label)
+                    LabeledContent(LocalizedStringKey(s.title), value: s.stroke.label)
                 }
             }
         }
@@ -89,12 +89,12 @@ struct SettingsView: View {
         .frame(width: 460, height: 640)
     }
 
-    private func slider(_ title: String, _ value: Binding<Double>, _ range: ClosedRange<Double>,
+    private func slider(_ title: LocalizedStringKey, _ value: Binding<Double>, _ range: ClosedRange<Double>,
                         _ format: String, scale: Double = 1) -> some View {
         LabeledContent(title) {
             HStack {
                 Slider(value: value, in: range)
-                Text(String(format: format, value.wrappedValue * scale))
+                Text(String(format: NSLocalizedString(format, comment: ""), value.wrappedValue * scale))
                     .monospacedDigit()
                     .frame(minWidth: 70, alignment: .trailing)
                     .foregroundStyle(.secondary)
@@ -124,15 +124,15 @@ struct SettingsView: View {
 extension KeycapPlacement {
     var title: String {
         switch self {
-        case .topLeft: "Top left"
-        case .top: "Top center"
-        case .topRight: "Top right"
-        case .left: "Middle left"
-        case .center: "Center"
-        case .right: "Middle right"
-        case .bottomLeft: "Bottom left"
-        case .bottom: "Bottom center"
-        case .bottomRight: "Bottom right"
+        case .topLeft: String(localized: "Top left")
+        case .top: String(localized: "Top center")
+        case .topRight: String(localized: "Top right")
+        case .left: String(localized: "Middle left")
+        case .center: String(localized: "Center")
+        case .right: String(localized: "Middle right")
+        case .bottomLeft: String(localized: "Bottom left")
+        case .bottom: String(localized: "Bottom center")
+        case .bottomRight: String(localized: "Bottom right")
         }
     }
 }

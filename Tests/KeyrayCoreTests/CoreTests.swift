@@ -386,6 +386,23 @@ let cmd: KeyModifiers = [.command]
     #expect(!other.isEmpty && other.allSatisfy { ShortcutSubtitles.subtitle(for: $0, bundleID: "com.example.unknown") != nil })
 }
 
+/// Every bundled subtitle has a translation, and every language translates the same UI strings.
+@Test func everySubtitleAndUIStringIsTranslated() throws {
+    let resources = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../Resources")
+    func table(_ lang: String, _ name: String) throws -> [String: String] {
+        let url = resources.appendingPathComponent("\(lang).lproj/\(name).strings")
+        return try #require(NSDictionary(contentsOf: url) as? [String: String], "\(url.path)")
+    }
+    var names = Set(ShortcutSubtitles.systemWide.values).union(VSCodeKeybindings.knownCommands.values)
+    for app in ShortcutSubtitles.apps.values { names.formUnion(app.bindings.values) }
+    let ui = try Set(table("ja", "Localizable").keys)
+    for lang in ["ja", "ko", "zh-Hans"] {
+        let subtitles = try table(lang, "Subtitles")
+        for name in names { #expect(subtitles[name] != nil, "\(lang): \(name)") }
+        #expect(try Set(table(lang, "Localizable").keys) == ui, "\(lang)")
+    }
+}
+
 @Test func labelsRoundTripToStrokes() {
     for label in ["⇧⌘P", "⌃`", "⌥F12", "esc", "⇧esc", "⌘↩", "⌃⇧⇥", "⇧⌘␣", "⌥⌘[", "F5"] {
         #expect(ShortcutSubtitles.stroke(forLabel: label)?.label == label)
